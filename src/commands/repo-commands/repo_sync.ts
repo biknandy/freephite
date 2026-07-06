@@ -24,16 +24,17 @@ const args = {
     type: 'boolean',
   },
   force: {
-    describe: `Don't prompt for confirmation before deleting a branch or resetting trunk to remote.`,
+    describe: `Deprecated (no-op): sync no longer prompts for confirmation.`,
     demandOption: false,
     default: false,
     type: 'boolean',
     alias: 'f',
+    hidden: true,
   },
   restack: {
-    describe: `Restack the current stack and any stacks with deleted branches.`,
+    describe: `Restack any branches that can be restacked without conflicts.`,
     demandOption: false,
-    default: false,
+    default: true,
     type: 'boolean',
     alias: 'r',
   },
@@ -51,7 +52,6 @@ export const handler = async (argv: argsT): Promise<void> => {
     await syncAction(
       {
         pull: argv.pull,
-        force: argv.force,
         delete: argv.delete,
         showDeleteProgress: argv['show-delete-progress'],
         restack: argv.restack,

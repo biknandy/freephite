@@ -7,7 +7,7 @@ import { fakeGitSquashAndMerge } from '../../lib/utils/fake_squash_and_merge';
 
 for (const scene of allScenes) {
   // eslint-disable-next-line max-lines-per-function
-  describe(`(${scene}): repo sync continue`, function () {
+  describe(`(${scene}): repo sync with conflicts`, function () {
     configureTest(this, scene);
 
     beforeEach(() => {
@@ -32,7 +32,7 @@ for (const scene of allScenes) {
       nock.restore();
     });
 
-    it('Can continue a repo sync with one merge conflict', async () => {
+    it('Skips a conflicting branch during sync and can restack it after', async () => {
       scene.repo.checkoutBranch('main');
       scene.repo.createChange('a', 'file_with_no_merge_conflict_a');
       scene.repo.runCliCommand([`branch`, `create`, `a`, `-m`, `a`]);
@@ -61,14 +61,22 @@ for (const scene of allScenes) {
       fakeGitSquashAndMerge(scene.repo, 'd', 'squash');
       fakeGitSquashAndMerge(scene.repo, 'e', 'squash');
 
+      // Sync must not stop on the conflict: it skips c and reports it.
+      const output = scene.repo.runCliCommandAndGetOutput([
+        `repo`,
+        `sync`,
+        `--no-pull`,
+        `--restack`,
+      ]);
+      expect(output).to.include('except for');
+      expect(output).to.include('c');
+      expect(scene.repo.rebaseInProgress()).to.be.false;
+      expectBranches(scene.repo, 'c, main');
+
+      // The skipped branch can then be restacked, hitting the conflict.
+      scene.repo.checkoutBranch('c');
       expect(() =>
-        scene.repo.runCliCommand([
-          `repo`,
-          `sync`,
-          `-f`,
-          `--no-pull`,
-          `--restack`,
-        ])
+        scene.repo.runCliCommand([`branch`, `restack`])
       ).to.throw();
       expect(scene.repo.rebaseInProgress()).to.be.true;
 
@@ -77,9 +85,10 @@ for (const scene of allScenes) {
       scene.repo.runCliCommand(['continue']);
 
       expectBranches(scene.repo, 'c, main');
+      expect(scene.repo.rebaseInProgress()).to.be.false;
     });
 
-    it('Can continue a repo sync with multiple merge conflicts', () => {
+    it('Skips multiple conflicting branches during a single sync', () => {
       scene.repo.checkoutBranch('main');
       scene.repo.createChange('a', 'file_with_no_merge_conflict_a');
       scene.repo.runCliCommand([`branch`, `create`, `a`, `-m`, `a`]);
@@ -109,26 +118,28 @@ for (const scene of allScenes) {
       fakeGitSquashAndMerge(scene.repo, 'e', 'squash');
       fakeGitSquashAndMerge(scene.repo, 'f', 'squash');
 
-      expect(() =>
-        scene.repo.runCliCommand([
-          `repo`,
-          `sync`,
-          `-f`,
-          `--no-pull`,
-          `--restack`,
-        ])
-      ).to.throw();
-      expect(scene.repo.rebaseInProgress()).to.be.true;
+      const output = scene.repo.runCliCommandAndGetOutput([
+        `repo`,
+        `sync`,
+        `--no-pull`,
+        `--restack`,
+      ]);
+      expect(output).to.include('except for');
+      expect(scene.repo.rebaseInProgress()).to.be.false;
+      expectBranches(scene.repo, 'c, d, main');
 
-      scene.repo.resolveMergeConflicts();
-      scene.repo.markMergeConflictsAsResolved();
-
-      expect(() => scene.repo.runCliCommand(['continue'])).to.throw();
-      expect(scene.repo.rebaseInProgress()).to.be.true;
-
-      scene.repo.resolveMergeConflicts();
-      scene.repo.markMergeConflictsAsResolved();
-      scene.repo.runCliCommand(['continue']);
+      // Both skipped branches can be restacked individually afterwards.
+      for (const branchName of ['c', 'd']) {
+        scene.repo.checkoutBranch(branchName);
+        expect(() =>
+          scene.repo.runCliCommand([`branch`, `restack`])
+        ).to.throw();
+        expect(scene.repo.rebaseInProgress()).to.be.true;
+        scene.repo.resolveMergeConflicts();
+        scene.repo.markMergeConflictsAsResolved();
+        scene.repo.runCliCommand(['continue']);
+        expect(scene.repo.rebaseInProgress()).to.be.false;
+      }
 
       expectBranches(scene.repo, 'c, d, main');
     });

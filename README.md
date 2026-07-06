@@ -72,7 +72,7 @@ The command surface matches the modern Graphite CLI
 | Push PRs for current branch + downstack | `gt submit` | |
 | Push PRs for the whole stack | `gt submit --stack` | `gt ss` |
 | Merge the PRs from trunk to current branch | `gt merge` | |
-| Pull trunk, delete merged branches, restack | `gt sync` | |
+| Pull trunk + branches, delete merged branches, restack | `gt sync` | |
 | Undo the last gt mutation (run again to redo) | `gt undo` | |
 | Revert a trunk commit on a new branch | `gt revert <sha>` | |
 | Switch branches | `gt checkout` (`gt co -` for previous) | `gt co` |
@@ -103,6 +103,15 @@ submit`, `gt repo sync`, ...) and its shortcuts (`bc`, `bco`, `ca`, `sr`, `ss`, 
 
 ### Notes on parity with the paid Graphite CLI
 
+- `gt sync` never prompts: it fast-forwards trunk (overwriting it with the
+  remote version if it can't be fast-forwarded), fast-forwards any tracked
+  branch whose remote has new commits (e.g. a bot pushed to your PR), deletes
+  branches whose PRs are merged/closed (`gt undo` restores them), and restacks
+  **every freephite-tracked branch** onto the new trunk - branches that would
+  conflict are skipped and listed so you can `gt restack` them individually.
+  Plain git branches you never tracked with freephite are never touched.
+  Branches that took trunk updates as merge commits (GitHub "Update branch")
+  are linearized on restack without replaying already-merged commits.
 - `gt merge` merges the stack's PRs bottom-up **via the GitHub API** (no merge
   queue): it retargets each PR to trunk, waits for mergeability, merges with the
   repo's preferred method, and restacks + pushes the branches above in between.

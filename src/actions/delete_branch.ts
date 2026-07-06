@@ -8,6 +8,7 @@ export function deleteBranchAction(
   args: {
     branchName: string;
     force?: boolean;
+    skipRestackConflicts?: boolean;
   },
   context: TContext
 ): void {
@@ -31,7 +32,9 @@ export function deleteBranchAction(
   context.engine.deleteBranch(args.branchName);
   context.splog.info(`Deleted branch ${chalk.red(args.branchName)}`);
 
-  restackBranches(branchesToRestack, context);
+  restackBranches(branchesToRestack, context, {
+    skipConflicts: args.skipRestackConflicts,
+  });
 }
 
 // Where did we merge this? If it was merged on GitHub, we see where it was

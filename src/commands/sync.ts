@@ -4,18 +4,26 @@ import { graphite } from '../lib/runner';
 
 const args = {
   force: {
-    describe: `Don't prompt for confirmation before overwriting or deleting a branch.`,
+    describe: `Deprecated (no-op): sync no longer prompts for confirmation.`,
     demandOption: false,
     default: false,
     type: 'boolean',
     alias: 'f',
+    hidden: true,
   },
   'delete-all': {
-    describe: `Delete all merged or closed branches without prompting.`,
+    describe: `Deprecated (no-op): merged and closed branches are always deleted. Skip with --no-delete.`,
     demandOption: false,
     default: false,
     type: 'boolean',
     alias: 'd',
+    hidden: true,
+  },
+  delete: {
+    describe: `Delete branches for PRs that have been merged or closed. Skip with --no-delete.`,
+    demandOption: false,
+    default: true,
+    type: 'boolean',
   },
   restack: {
     describe: `Restack any branches that can be restacked without conflicts. Skip with --no-restack.`,
@@ -36,18 +44,16 @@ type argsT = yargs.Arguments<yargs.InferredOptionTypes<typeof args>>;
 export const command = 'sync';
 export const canonical = 'sync';
 export const description =
-  'Pull the trunk branch from remote, prompt to delete any branches for PRs that have been merged or closed, and restack. If trunk cannot be fast-forwarded, prompts to overwrite trunk with the remote version.';
+  'Pull the trunk branch from remote, fast-forward local branches that have new commits on remote, delete any branches whose PRs have been merged or closed, and restack all branches that can be restacked without conflicts. If trunk cannot be fast-forwarded, it is overwritten with the remote version.';
 export const builder = args;
 export const handler = async (argv: argsT): Promise<void> => {
   return graphite(argv, canonical, async (context) => {
     await syncAction(
       {
         pull: argv.pull,
-        force: argv.force,
-        delete: true,
+        delete: argv.delete,
         showDeleteProgress: false,
         restack: argv.restack,
-        forceDelete: argv['delete-all'],
       },
       context
     );

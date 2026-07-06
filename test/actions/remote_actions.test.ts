@@ -56,7 +56,6 @@ for (const scene of [new CloneScene()]) {
       await syncAction(
         {
           pull: true,
-          force: false,
           delete: false,
           showDeleteProgress: false,
           restack: false,
@@ -69,31 +68,75 @@ for (const scene of [new CloneScene()]) {
       );
     });
 
-    it('errors if trunk diverges from remote and force is false', async () => {
-      scene.originRepo.createChangeAndCommit('a');
-      scene.repo.createChangeAndCommit('b');
-      await expect(
-        syncAction(
-          {
-            pull: true,
-            force: false,
-            delete: false,
-            showDeleteProgress: false,
-            restack: false,
-          },
-          scene.getContext()
-        )
-      ).to.eventually.be.rejectedWith('Killed Graphite early.');
+    it('fast-forwards a local branch when remote has new commits', async () => {
+      scene.repo.createChange('1');
+      scene.repo.runCliCommand([`branch`, `create`, `1`, `-am`, `1`]);
+
+      composeGit().pushBranch({
+        remote: 'origin',
+        branchName: '1',
+        noVerify: false,
+        forcePush: false,
+      });
+
+      // Simulate a bot/teammate pushing a commit to the PR branch.
+      scene.originRepo.checkoutBranch('1');
+      scene.originRepo.createChangeAndCommit('bot');
+      scene.originRepo.checkoutBranch('main');
+
+      await syncAction(
+        {
+          pull: true,
+          delete: false,
+          showDeleteProgress: false,
+          restack: false,
+        },
+        scene.getContext()
+      );
+
+      expect(scene.repo.getRef('refs/heads/1')).to.equal(
+        scene.originRepo.getRef('refs/heads/1')
+      );
+      // The current branch was fast-forwarded in place, not left dirty.
+      expect(scene.repo.currentBranchName()).to.equal('1');
+      expect(scene.repo.rebaseInProgress()).to.be.false;
     });
 
-    it('can reset trunk from remote', async () => {
+    it('leaves a diverged local branch alone during sync', async () => {
+      scene.repo.createChange('1');
+      scene.repo.runCliCommand([`branch`, `create`, `1`, `-am`, `1`]);
+
+      composeGit().pushBranch({
+        remote: 'origin',
+        branchName: '1',
+        noVerify: false,
+        forcePush: false,
+      });
+
+      // Local branch moves ahead of remote (e.g. after an amend).
+      scene.repo.createChangeAndCommit('local');
+      const localSha = scene.repo.getRef('refs/heads/1');
+
+      await syncAction(
+        {
+          pull: true,
+          delete: false,
+          showDeleteProgress: false,
+          restack: false,
+        },
+        scene.getContext()
+      );
+
+      expect(scene.repo.getRef('refs/heads/1')).to.equal(localSha);
+    });
+
+    it('automatically resets trunk to remote when it has diverged', async () => {
       scene.originRepo.createChangeAndCommit('a');
       scene.repo.createChangeAndCommit('b');
 
       await syncAction(
         {
           pull: true,
-          force: true,
           delete: false,
           showDeleteProgress: false,
           restack: false,

@@ -48,7 +48,7 @@ export const handler = async (argv: argsT): Promise<void> =>
       : argv.downstack
       ? SCOPE.DOWNSTACK
       : SCOPE.STACK;
-    return restackBranches(
+    restackBranches(
       context.engine.getRelativeStack(
         argv.branch ?? context.engine.currentBranchPrecondition,
         scope
