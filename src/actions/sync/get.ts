@@ -7,23 +7,14 @@ import { assertUnreachable } from '../../lib/utils/assert_unreachable';
 import { persistContinuation } from '../persist_continuation';
 import { printConflictStatus } from '../print_conflict_status';
 import { syncPrInfo } from '../sync_pr_info';
+import { pullTrunk } from './sync';
 
 export async function getAction(
   args: { branchName: string | undefined; force: boolean },
   context: TContext
 ): Promise<void> {
   uncommittedTrackedChangesPrecondition();
-  context.splog.info(
-    `Pulling ${chalk.cyan(context.engine.trunk)} from remote...`
-  );
-
-  context.splog.info(
-    context.engine.pullTrunk() === 'PULL_UNNEEDED'
-      ? `${chalk.green(context.engine.trunk)} is up to date.`
-      : `${chalk.green(context.engine.trunk)} fast-forwarded to ${chalk.gray(
-          context.engine.getRevision(context.engine.trunk)
-        )}.`
-  );
+  pullTrunk(context);
   context.splog.newline();
 
   const downstackToSync = await getDownstackDependencies(

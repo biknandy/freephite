@@ -13,12 +13,12 @@ export const description =
   'Ensure the current branch and each of its descendants is based on its parent, rebasing if necessary.';
 export const builder = args;
 export const handler = async (argv: argsT): Promise<void> =>
-  graphite(argv, canonical, async (context) =>
+  graphite(argv, canonical, async (context) => {
     restackBranches(
       context.engine.getRelativeStack(
         context.engine.currentBranchPrecondition,
         SCOPE.UPSTACK
       ),
       context
-    )
-  );
+    );
+  });

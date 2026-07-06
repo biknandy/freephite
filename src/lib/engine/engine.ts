@@ -136,6 +136,9 @@ export type TEngine = {
   isBranchEmpty: (branchName: string) => boolean;
   populateRemoteShas: () => Promise<void>;
   branchMatchesRemote: (branchName: string) => boolean;
+  syncBranchWithRemote: (
+    branchName: string
+  ) => 'FAST_FORWARDED' | 'UP_TO_DATE' | 'NO_REMOTE' | 'DIVERGED';
 
   pushBranch: (branchName: string, forcePush: boolean) => void;
   pullTrunk: () => 'PULL_DONE' | 'PULL_UNNEEDED' | 'PULL_CONFLICT';
@@ -849,11 +852,24 @@ export function composeEngine({
       const newBase =
         cache.branches[cachedMeta.parentBranchName].branchRevision;
 
+      // If the branch contains parent history newer than its recorded base
+      // (e.g. the parent was merged into it, GitHub "Update branch" style),
+      // rebase from that point so already-merged commits aren't replayed.
+      const mergeBaseWithParent = git.getMergeBase(branchName, newBase);
+      const from =
+        mergeBaseWithParent !== cachedMeta.parentBranchRevision &&
+        git.getMergeBase(
+          mergeBaseWithParent,
+          cachedMeta.parentBranchRevision
+        ) === cachedMeta.parentBranchRevision
+          ? mergeBaseWithParent
+          : cachedMeta.parentBranchRevision;
+
       if (
         git.rebase({
           branchName,
           onto: cachedMeta.parentBranchName,
-          from: cachedMeta.parentBranchRevision,
+          from,
           restackCommitterDateIsAuthorDate,
         }) === 'REBASE_CONFLICT'
       ) {
@@ -937,6 +953,35 @@ export function composeEngine({
       const cachedMeta = assertBranchIsValidOrTrunkAndGetMeta(branchName);
       const remoteParentRevision = git.getRemoteSha(branchName);
       return cachedMeta.branchRevision === remoteParentRevision;
+    },
+    // Fast-forwards a local branch to its remote counterpart when the remote
+    // is strictly ahead (e.g. a bot or teammate pushed commits to the PR).
+    // Requires populateRemoteShas() to have been called first.
+    syncBranchWithRemote: (branchName: string) => {
+      const cachedMeta = assertBranchIsValidAndNotTrunkAndGetMeta(branchName);
+      const remoteSha = git.getRemoteSha(branchName);
+      if (!remoteSha) {
+        return 'NO_REMOTE';
+      }
+      if (remoteSha === cachedMeta.branchRevision) {
+        return 'UP_TO_DATE';
+      }
+      // Make the remote objects available locally before comparing ancestry.
+      git.fetchBranchAndPrune(remote, branchName);
+      if (
+        git.getMergeBase(branchName, remoteSha) !== cachedMeta.branchRevision
+      ) {
+        return 'DIVERGED';
+      }
+      if (branchName === cache.currentBranch) {
+        if (git.mergeFastForward(remoteSha) === 'CONFLICT') {
+          return 'DIVERGED';
+        }
+      } else {
+        git.forceCreateBranch(branchName, remoteSha);
+      }
+      cachedMeta.branchRevision = remoteSha;
+      return 'FAST_FORWARDED';
     },
     pushBranch: (branchName: string, forcePush: boolean) => {
       assertBranchIsValidAndNotTrunkAndGetMeta(branchName);

@@ -156,5 +156,51 @@ for (const scene of allScenes) {
       expect(metadata.includes('b')).to.be.false;
       expect(metadata.includes('c')).to.be.true;
     });
+
+    it('Restacks all branches in the repo, not just the current stack', async () => {
+      scene.repo.createChange('2', 'a');
+      scene.repo.runCliCommand([`branch`, `create`, `a`, `-m`, `a`]);
+
+      scene.repo.checkoutBranch('main');
+      scene.repo.createChange('3', 'b');
+      scene.repo.runCliCommand([`branch`, `create`, `b`, `-m`, `b`]);
+
+      // Advance trunk so both independent stacks need a restack.
+      scene.repo.checkoutBranch('main');
+      scene.repo.createChangeAndCommit('m1', 'm1');
+
+      scene.repo.checkoutBranch('a');
+      scene.repo.runCliCommand([`repo`, `sync`, `--no-pull`]);
+
+      // The command returns the user to the branch they started on.
+      expect(scene.repo.currentBranchName()).to.equal('a');
+      expectCommits(scene.repo, 'a, m1, 1');
+
+      // b is not in a's stack but was restacked too.
+      scene.repo.checkoutBranch('b');
+      expectCommits(scene.repo, 'b, m1, 1');
+    });
+
+    it('Restacks a branch that had trunk merged into it (merge workflow)', async () => {
+      scene.repo.createChange('2', 'a');
+      scene.repo.runCliCommand([`branch`, `create`, `a`, `-m`, `a`]);
+
+      // Trunk advances; the branch takes the update as a merge commit
+      // (GitHub "Update branch" style) instead of a rebase.
+      scene.repo.checkoutBranch('main');
+      scene.repo.createChangeAndCommit('m1', 'm1');
+      scene.repo.mergeBranch({ branch: 'a', mergeIn: 'main' });
+
+      // Trunk advances again, so the branch is behind main once more.
+      scene.repo.checkoutBranch('main');
+      scene.repo.createChangeAndCommit('m2', 'm2');
+
+      scene.repo.checkoutBranch('a');
+      scene.repo.runCliCommand([`repo`, `sync`, `--no-pull`]);
+
+      // The branch ends up linear on top of the latest trunk: the merge
+      // commit is gone and already-merged trunk commits weren't replayed.
+      expectCommits(scene.repo, 'a, m2, m1, 1');
+    });
   });
 }

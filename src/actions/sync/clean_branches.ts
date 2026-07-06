@@ -14,7 +14,6 @@ import { deleteBranchAction, isSafeToDelete } from '../delete_branch';
 export async function cleanBranches(
   opts: {
     showDeleteProgress: boolean;
-    force: boolean;
   },
   context: TContext
 ): Promise<string[]> {
@@ -65,13 +64,7 @@ export async function cleanBranches(
     }
 
     context.splog.debug(`Checking if should delete ${branchName}...`);
-    const shouldDelete = await shouldDeleteBranch(
-      {
-        branchName: branchName,
-        force: opts.force,
-      },
-      context
-    );
+    const shouldDelete = shouldDeleteBranch(branchName, context);
     if (shouldDelete) {
       const children = context.engine.getChildren(branchName);
 
@@ -137,7 +130,10 @@ function greedilyDeleteUnblockedBranches(
     const branchName = unblockedBranches.pop()!;
     const parentBranchName = context.engine.getParentPrecondition(branchName);
 
-    deleteBranchAction({ branchName: branchName, force: true }, context);
+    deleteBranchAction(
+      { branchName: branchName, force: true, skipRestackConflicts: true },
+      context
+    );
 
     // This branch is no longer blocking its parent's deletion.
     // Remove it from the parents list of blockers and check if parent is
@@ -172,42 +168,22 @@ function getProgressMarkers(trunkChildren: string[]): Record<string, string> {
   return progressMarkers;
 }
 
-async function shouldDeleteBranch(
-  args: {
-    branchName: string;
-    force: boolean;
-  },
-  context: TContext
-): Promise<boolean> {
-  const shouldDelete = isSafeToDelete(args.branchName, context);
+// Merged and closed branches are deleted without prompting, matching the
+// behavior of the Graphite CLI. `gt undo` restores them if this was wrong.
+function shouldDeleteBranch(branchName: string, context: TContext): boolean {
+  const shouldDelete = isSafeToDelete(branchName, context);
   if (!shouldDelete.result) {
     return false;
   }
 
   // Don't delete empty branches without an associated PR
   if (
-    context.engine.isBranchEmpty(args.branchName) &&
-    !context.engine.getPrInfo(args.branchName)?.number
+    context.engine.isBranchEmpty(branchName) &&
+    !context.engine.getPrInfo(branchName)?.number
   ) {
     return false;
   }
 
-  if (args.force) {
-    return true;
-  }
-
-  if (!context.interactive) {
-    return false;
-  }
-
-  return (
-    (
-      await context.prompts({
-        type: 'confirm',
-        name: 'value',
-        message: `${shouldDelete.reason}. Delete it?`,
-        initial: true,
-      })
-    ).value === true
-  );
+  context.splog.info(`${shouldDelete.reason}.`);
+  return true;
 }
