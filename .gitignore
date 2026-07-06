@@ -14,3 +14,4 @@ pkg/
 
 package-lock.json
 bun.lockb
+pnpm-lock.yaml
