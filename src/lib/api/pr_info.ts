@@ -34,6 +34,29 @@ export type TPRInfoToUpsert = t.UnwrapSchemaMap<
   typeof pullRequestInfoResponse
 >['prs'];
 
+type TGraphqlPr = {
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'OPEN' | 'CLOSED' | 'MERGED';
+  url: string;
+  isDraft: boolean | null;
+  headRefName: string;
+  baseRefName: string;
+  reviewDecision: 'CHANGES_REQUESTED' | 'APPROVED' | 'REVIEW_REQUIRED' | null;
+  headRepositoryOwner: { login: string } | null;
+} | null;
+
+const PR_FRAGMENT = `fragment PrInfo on PullRequest { number title body state url isDraft headRefName baseRefName reviewDecision headRepositoryOwner { login } }`;
+// Keep documents comfortably under GitHub's GraphQL node and complexity limits.
+const CHUNK_SIZE = 80;
+
+/**
+ * Fetches PR info for all branches in a handful of batched GraphQL requests
+ * (one round trip per CHUNK_SIZE branches) instead of several REST requests
+ * per branch. Branches with a known PR number are looked up by number; the
+ * rest are matched against open PRs by head branch name.
+ */
 export async function getPrInfoForBranches(
   branchNamesWithExistingPrInfo: TBranchNameWithPrNumber[],
   params: TRepoParams,
@@ -58,142 +81,53 @@ export async function getPrInfoForBranches(
   }
 
   const octokit = new Octokit({ auth });
-  const requests = [];
 
-  for (const pr of existingPrInfo.keys()) {
-    requests.push({
-      pr: octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
-        owner: params.repoOwner,
-        repo: params.repoName,
-        pull_number: pr,
-        headers: {
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      }),
-      merge: octokit.request(
-        'GET /repos/{owner}/{repo}/pulls/{pull_number}/merge',
-        {
-          owner: params.repoOwner,
-          repo: params.repoName,
-          pull_number: pr,
-          headers: {
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-        }
-      ),
-      reviews: octokit.request(
-        'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews',
-        {
-          owner: params.repoOwner,
-          repo: params.repoName,
-          pull_number: pr,
-          headers: {
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-        }
-      ),
-      review_requests: octokit.request(
-        'GET /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers',
-        {
-          owner: params.repoOwner,
-          repo: params.repoName,
-          pull_number: pr,
-          headers: {
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-        }
-      ),
+  const selections = [
+    ...[...existingPrInfo.keys()].map(
+      (prNumber, i) => `n${i}: pullRequest(number: ${prNumber}) { ...PrInfo }`
+    ),
+    ...[...branchesWithoutPrInfo].map(
+      (branchName, i) =>
+        `h${i}: pullRequests(headRefName: ${JSON.stringify(
+          branchName
+        )}, states: OPEN, first: 5) { nodes { ...PrInfo } }`
+    ),
+  ];
+
+  const aliased: Record<string, TGraphqlPr | { nodes: TGraphqlPr[] }> = {};
+  for (let i = 0; i < selections.length; i += CHUNK_SIZE) {
+    const query = `query ($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${selections
+      .slice(i, i + CHUNK_SIZE)
+      .join(' ')} } } ${PR_FRAGMENT}`;
+    const data = await graphqlAllowPartialResponse(octokit, query, {
+      owner: params.repoOwner,
+      name: params.repoName,
     });
+    Object.assign(aliased, data?.repository ?? {});
   }
 
-  const responses = await Promise.all(
-    requests.map(({ pr, merge, reviews, review_requests }) =>
-      Promise.allSettled([pr, merge, reviews, review_requests]).then(
-        ([pr, merge, reviews, review_requests]) => {
-          if (
-            pr.status !== 'fulfilled' ||
-            reviews.status !== 'fulfilled' ||
-            review_requests.status !== 'fulfilled'
-          ) {
-            return null;
-          }
-
-          const isOpen = pr.value.data.state === 'open';
-          const isMerged = merge.status === 'fulfilled';
-          const isApproved = reviews.value.data.some(
-            (r) => r.state === 'APPROVED'
-          );
-          const isRequestedChanges = reviews.value.data.some(
-            (r) => r.state === 'CHANGES_REQUESTED'
-          );
-
-          const isReviewRequired =
-            review_requests.value.data.teams.length > 0 ||
-            review_requests.value.data.users.length > 0;
-
-          return {
-            prNumber: pr.value.data.number,
-            title: pr.value.data.title,
-            body: pr.value.data.body ?? '',
-            state: isOpen ? 'OPEN' : isMerged ? 'MERGED' : 'CLOSED',
-            reviewDecision: isApproved
-              ? 'APPROVED'
-              : isRequestedChanges
-              ? 'CHANGES_REQUESTED'
-              : isReviewRequired
-              ? 'REVIEW_REQUIRED'
-              : null,
-            headRefName: pr.value.data.head.ref,
-            baseRefName: pr.value.data.base.ref,
-            url: pr.value.data.html_url,
-            isDraft: pr.value.data.draft ?? false,
-          } as const;
-        }
-      )
-    )
-  );
-
-  // Discover open PRs for branches that don't have an associated PR number.
-  const discovered = await Promise.all(
-    [...branchesWithoutPrInfo].map((branchName) =>
-      octokit
-        .request('GET /repos/{owner}/{repo}/pulls', {
-          owner: params.repoOwner,
-          repo: params.repoName,
-          head: `${params.repoOwner}:${branchName}`,
-          state: 'open',
-          per_page: 1,
-          headers: {
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-        })
-        .then(
-          (response) => {
-            const pr = response.data[0];
-            return pr
-              ? ({
-                  prNumber: pr.number,
-                  title: pr.title,
-                  body: pr.body ?? '',
-                  state: 'OPEN',
-                  reviewDecision: null,
-                  headRefName: pr.head.ref,
-                  baseRefName: pr.base.ref,
-                  url: pr.html_url,
-                  isDraft: pr.draft ?? false,
-                } as const)
-              : null;
-          },
-          () => null
-        )
-    )
-  );
-
-  /** Filter nulls, typescript */
   const prs: TPRInfoToUpsert = [];
-  for (const pr of [...responses, ...discovered]) {
+  for (const response of Object.values(aliased)) {
+    const pr =
+      response && 'nodes' in response
+        ? // headRefName matches PRs from forks too; only associate PRs whose
+          // head branch lives in this repo.
+          response.nodes.find(
+            (node) => node?.headRepositoryOwner?.login === params.repoOwner
+          )
+        : response;
     if (pr) {
-      prs.push(pr);
+      prs.push({
+        prNumber: pr.number,
+        title: pr.title,
+        body: pr.body ?? '',
+        state: pr.state,
+        reviewDecision: pr.reviewDecision,
+        headRefName: pr.headRefName,
+        baseRefName: pr.baseRefName,
+        url: pr.url,
+        isDraft: pr.isDraft ?? false,
+      });
     }
   }
 
@@ -210,4 +144,22 @@ export async function getPrInfoForBranches(
 
     return shouldAssociatePrWithBranch || shouldUpdateExistingBranch;
   });
+}
+
+// PR info refresh is best-effort: a missing PR (e.g. a stale PR number)
+// surfaces as a GraphQL error alongside partial data, which we use; rate
+// limits, outages, and transport failures skip the batch so callers (sync,
+// submit validation) proceed with the metadata they already have.
+async function graphqlAllowPartialResponse(
+  octokit: Octokit,
+  query: string,
+  variables: { owner: string; name: string }
+): Promise<{ repository?: Record<string, never> } | undefined> {
+  try {
+    return await octokit.graphql(query, variables);
+  } catch (err) {
+    return err?.name === 'GraphqlResponseError' && err.data
+      ? err.data
+      : undefined;
+  }
 }

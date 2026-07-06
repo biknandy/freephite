@@ -36,8 +36,7 @@ import { isMerged } from './is_merged';
 import { logLong } from './log';
 import { getMergeBase } from './merge_base';
 import { getUnmergedFiles, getRebaseHead } from './merge_conflict_help';
-import { pruneRemote } from './prune_remote';
-import { pullBranch } from './pull_branch';
+import { fetchBranchAndPrune, mergeFastForward } from './pull_branch';
 import { pushBranch } from './push_branch';
 import {
   rebase,
@@ -98,10 +97,10 @@ function composeGitInternal() {
     getMergeBase,
     getUnmergedFiles,
     getRebaseHead,
-    pruneRemote,
+    fetchBranchAndPrune,
     showCommits,
     getFileContents,
-    pullBranch,
+    mergeFastForward,
     pushBranch,
     rebaseInProgress,
     rebase,

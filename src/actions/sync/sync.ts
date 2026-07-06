@@ -27,7 +27,12 @@ export async function syncAction(
 
   const branchesToRestack: string[] = [];
 
-  await syncPrInfo(context.engine.allBranchNames, context);
+  await syncPrInfo(
+    context.engine.allBranchNames.filter((branchName) =>
+      context.engine.isBranchTracked(branchName)
+    ),
+    context
+  );
 
   if (opts.delete) {
     context.splog.info(

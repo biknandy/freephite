@@ -31,8 +31,8 @@ export function upsertPrInfoForBranches(
   prInfoToUpsert: TPRInfoToUpsert,
   engine: TEngine
 ): void {
-  prInfoToUpsert.forEach((pr) =>
-    engine.upsertPrInfo(pr.headRefName, {
+  prInfoToUpsert.forEach((pr) => {
+    const prInfo = {
       number: pr.prNumber,
       title: pr.title,
       body: pr.body,
@@ -41,6 +41,17 @@ export function upsertPrInfoForBranches(
       base: pr.baseRefName,
       url: pr.url,
       isDraft: pr.isDraft,
-    })
-  );
+    };
+    // Skip the metadata ref write (two git subprocesses) when nothing changed.
+    const existing = engine.getPrInfo(pr.headRefName);
+    if (
+      existing &&
+      Object.entries(prInfo).every(
+        ([key, value]) => existing[key as keyof typeof prInfo] === value
+      )
+    ) {
+      return;
+    }
+    engine.upsertPrInfo(pr.headRefName, prInfo);
+  });
 }

@@ -923,28 +923,35 @@ export function composeEngine({
       git.pushBranch({ remote, branchName, noVerify, forcePush });
     },
     pullTrunk: () => {
-      git.pruneRemote(remote);
       const currentBranchName = getCurrentBranchOrThrow();
       const trunkName = assertTrunk();
       const oldTrunkCachedMeta = cache.branches[trunkName];
-      try {
-        git.switchBranch(trunkName);
-        const result = git.pullBranch(remote, trunkName);
-        if (result === 'CONFLICT') {
-          git.switchBranch(currentBranchName);
+
+      git.fetchBranchAndPrune(remote, trunkName);
+      const newTrunkRevision = git.getShaOrThrow(`${remote}/${trunkName}`);
+
+      const mergeBase = git.getMergeBase(trunkName, newTrunkRevision);
+      if (mergeBase === newTrunkRevision) {
+        // Remote is equal to or behind local trunk; nothing to pull.
+        return 'PULL_UNNEEDED';
+      }
+      if (mergeBase !== oldTrunkCachedMeta.branchRevision) {
+        return 'PULL_CONFLICT';
+      }
+
+      if (currentBranchName === trunkName) {
+        if (git.mergeFastForward(newTrunkRevision) === 'CONFLICT') {
           return 'PULL_CONFLICT';
         }
-        const newTrunkRevision = git.getShaOrThrow(trunkName);
-        cache.branches[trunkName] = {
-          ...oldTrunkCachedMeta,
-          branchRevision: newTrunkRevision,
-        };
-        return oldTrunkCachedMeta.branchRevision === newTrunkRevision
-          ? 'PULL_UNNEEDED'
-          : 'PULL_DONE';
-      } finally {
-        git.switchBranch(currentBranchName);
+      } else {
+        git.forceCreateBranch(trunkName, newTrunkRevision);
       }
+
+      cache.branches[trunkName] = {
+        ...oldTrunkCachedMeta,
+        branchRevision: newTrunkRevision,
+      };
+      return 'PULL_DONE';
     },
     hardReset: git.hardReset,
     resetTrunkToRemote: () => {
