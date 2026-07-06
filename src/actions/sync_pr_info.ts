@@ -10,17 +10,25 @@ export async function syncPrInfo(
     return [];
   }
 
-  const upsertInfo = await getPrInfoForBranches(
-    branchNames.map((branchName) => ({
-      branchName,
-      prNumber: context.engine.getPrInfo(branchName)?.number,
-    })),
-    {
-      repoName: context.repoConfig.getRepoName(),
-      repoOwner: context.repoConfig.getRepoOwner(),
-    },
-    context.userConfig
-  );
+  // PR info refresh is best-effort: an unreachable API or a remote that
+  // isn't a GitHub repo shouldn't fail the command using it.
+  let upsertInfo: TPRInfoToUpsert;
+  try {
+    upsertInfo = await getPrInfoForBranches(
+      branchNames.map((branchName) => ({
+        branchName,
+        prNumber: context.engine.getPrInfo(branchName)?.number,
+      })),
+      {
+        repoName: context.repoConfig.getRepoName(),
+        repoOwner: context.repoConfig.getRepoOwner(),
+      },
+      context.userConfig
+    );
+  } catch (err) {
+    context.splog.debug(`Failed to fetch PR info: ${err}`);
+    return [];
+  }
 
   upsertPrInfoForBranches(upsertInfo, context.engine);
 

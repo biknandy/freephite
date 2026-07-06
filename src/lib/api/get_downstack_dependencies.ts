@@ -1,5 +1,5 @@
-import { Octokit } from '@octokit/core';
 import { TContext } from '../context';
+import { getOctokit } from './octokit';
 
 /**
  * Computes the downstack (trunk-exclusive, ordered bottom to top) for a
@@ -10,8 +10,9 @@ export async function getDownstackDependencies(
   args: { branchName: string; trunkName: string },
   context: TContext
 ): Promise<string[]> {
-  const auth = context.userConfig.getFPAuthToken();
-  const octokit = auth ? new Octokit({ auth }) : undefined;
+  const octokit = context.userConfig.getFPAuthToken()
+    ? getOctokit(context.userConfig)
+    : undefined;
   const owner = context.repoConfig.getRepoOwner();
   const repo = context.repoConfig.getRepoName();
 

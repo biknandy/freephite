@@ -85,6 +85,20 @@ export function deleteMetadataRef(branchName: string): void {
   });
 }
 
+// Point a branch's metadata ref at an existing metadata blob (used by
+// `gt undo` to restore metadata captured in a snapshot).
+export function setMetadataRefFromBlob(
+  branchName: string,
+  blobSha: string
+): void {
+  runGitCommand({
+    args: [`update-ref`, `refs/branch-metadata/${branchName}`, blobSha],
+    options: { stdio: 'pipe' },
+    onError: 'throw',
+    resource: 'setMetadataRefFromBlob',
+  });
+}
+
 export function getMetadataRefList(): Record<string, string> {
   const meta: Record<string, string> = {};
   runGitCommandAndSplitLines({

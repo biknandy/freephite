@@ -6,7 +6,7 @@ import { CommandFailedError } from '../../lib/git/runner';
 import { getPRInfoForBranches } from './prepare_branches';
 import { submitPullRequest } from './submit_prs';
 import { validateBranchesToSubmit } from './validate_branches';
-import { Octokit } from '@octokit/core';
+import { getOctokit } from '../../lib/api/octokit';
 import { type PR, StackCommentBody } from './comment_body';
 
 // eslint-disable-next-line max-lines-per-function
@@ -110,6 +110,9 @@ export async function submitAction(
     return;
   }
 
+  // Fail fast if the user has no auth token, before pushing any branches.
+  const octokit = getOctokit(context.userConfig);
+
   context.splog.info(
     chalk.blueBright('📨 Pushing to remote and creating/updating PRs...')
   );
@@ -137,15 +140,6 @@ export async function submitAction(
 
     await submitPullRequest({ submissionInfo: [submissionInfo] }, context);
   }
-
-  const auth = context.userConfig.getFPAuthToken();
-  if (!auth) {
-    throw new Error(
-      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>` then try again.'
-    );
-  }
-
-  const octokit = new Octokit({ auth });
 
   const prs: Array<PR> = [];
   for (const branchName of branchNames) {
@@ -228,9 +222,11 @@ async function selectBranches(
         message: `Would you like to submit ${chalk.cyan(branchName)}?`,
       })
     ).value;
-    // Clear the prompt result
-    process.stdout.moveCursor(0, -1);
-    process.stdout.clearLine(1);
+    // Clear the prompt result (no-op when stdout is not a terminal)
+    if (process.stdout.isTTY) {
+      process.stdout.moveCursor(0, -1);
+      process.stdout.clearLine(1);
+    }
     if (selected) {
       result.push(branchName);
     }

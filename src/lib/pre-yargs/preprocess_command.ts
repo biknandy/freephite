@@ -77,5 +77,16 @@ export function getYargsInput(): string[] {
     ...process.argv.slice(3),
   ];
   handleDeprecatedCommandNames(yargsInput.slice(0, 2));
+
+  // Support `gt checkout -` (the previous branch, like git): yargs would
+  // otherwise parse a bare `-` as a boolean, so rewrite it to the git
+  // syntax `@{-1}` which the checkout action resolves.
+  if (
+    yargsInput[0] === 'checkout' ||
+    yargsInput[0] === 'co' ||
+    (yargsInput[0] === 'branch' && yargsInput[1] === 'checkout')
+  ) {
+    return yargsInput.map((arg) => (arg === '-' ? '@{-1}' : arg));
+  }
   return yargsInput;
 }

@@ -165,6 +165,10 @@ export class GitRepo {
     return this.runGitCommandAndGetOutput([`show-ref`, `-s`, refName]);
   }
 
+  getFileContents(relativePath: string): string {
+    return fs.readFileSync(path.join(this.dir, relativePath), 'utf-8');
+  }
+
   listCurrentBranchCommitMessages(): string[] {
     return this.runGitCommandAndGetOutput([`log`, `--oneline`, `--format=%B`])
       .split('\n')

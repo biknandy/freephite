@@ -45,7 +45,14 @@ export async function init(
   }
   context.splog.newline();
 
-  if (context.interactive) {
+  const hasUntrackedBranches =
+    context.engine.allBranchNames.filter(
+      (branchName) =>
+        !context.engine.isTrunk(branchName) &&
+        !context.engine.isBranchTracked(branchName)
+    ).length > 0;
+
+  if (context.interactive && hasUntrackedBranches) {
     await branchOnboardingFlow(context);
   }
 }

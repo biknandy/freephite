@@ -24,6 +24,7 @@ process.on('uncaughtException', (err) => {
 });
 
 void yargs(getYargsInput())
+  .scriptName('gt')
   .commandDir('commands')
   .help()
   .usage(

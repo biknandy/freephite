@@ -4,6 +4,7 @@ import {
   forceCheckoutNewBranch,
   forceCreateBranch,
   getCurrentBranchName,
+  getPreviousBranchName,
   moveBranch,
   switchBranch,
 } from './branch_ops';
@@ -47,6 +48,7 @@ import {
 import { rebaseInProgress } from './rebase_in_progress';
 import { hardReset, mixedReset, softReset, trackedReset } from './reset_branch';
 import { restoreFile } from './restore_file';
+import { getCommitSubject, revertAbort, revertNoCommit } from './revert';
 import { setRemoteTracking } from './set_remote_tracking';
 import { showCommits } from './show_commits';
 import { getBranchNamesAndRevisions } from './sorted_branch_names';
@@ -67,6 +69,7 @@ function composeGitInternal() {
     getFilesChanged,
     getStatus,
     getCurrentBranchName,
+    getPreviousBranchName,
     moveBranch,
     deleteBranch,
     switchBranch,
@@ -115,5 +118,8 @@ function composeGitInternal() {
     getBranchNamesAndRevisions,
     clean,
     restoreFile,
+    revertNoCommit,
+    revertAbort,
+    getCommitSubject,
   };
 }

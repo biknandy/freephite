@@ -86,6 +86,7 @@ export type TEngine = {
 
   checkoutNewBranch: (branchName: string) => void;
   checkoutBranch: (branchName: string) => void;
+  getPreviousBranchName: () => string | undefined;
   renameCurrentBranch: (branchName: string) => void;
   foldCurrentBranch: (keep: boolean) => void;
   deleteBranch: (branchName: string) => void;
@@ -126,6 +127,11 @@ export type TEngine = {
   abortRebase: (branchToRestore?: string) => void;
 
   isMergedIntoTrunk: (branchName: string) => boolean;
+  resolveCommitish: (committish: string) => string | undefined;
+  isAncestorOfTrunk: (sha: string) => boolean;
+  getCommitSubject: (committish: string) => string;
+  revertNoCommit: (sha: string) => void;
+  revertAbort: () => void;
   isBranchFixed: (branchName: string) => boolean;
   isBranchEmpty: (branchName: string) => boolean;
   populateRemoteShas: () => Promise<void>;
@@ -642,6 +648,7 @@ export function composeEngine({
       cache.currentBranch = branchName;
     },
     checkoutBranch,
+    getPreviousBranchName: () => git.getPreviousBranchName(),
     renameCurrentBranch: (branchName: string) => {
       const currentBranchName = getCurrentBranchOrThrow();
       if (branchName === currentBranchName) {
@@ -904,6 +911,16 @@ export function composeEngine({
       const trunkName = assertTrunk();
       return git.isMerged({ branchName, trunkName });
     },
+    resolveCommitish: (committish: string) => {
+      const sha = git.getSha(committish);
+      return sha ? sha : undefined;
+    },
+    isAncestorOfTrunk: (sha: string) => {
+      return git.getMergeBase(sha, assertTrunk()) === sha;
+    },
+    getCommitSubject: (committish: string) => git.getCommitSubject(committish),
+    revertNoCommit: (sha: string) => git.revertNoCommit(sha),
+    revertAbort: () => git.revertAbort(),
     isBranchFixed,
     isBranchEmpty: (branchName: string) => {
       assertBranch(branchName);

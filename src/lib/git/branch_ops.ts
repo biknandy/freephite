@@ -10,6 +10,19 @@ export function getCurrentBranchName(): string | undefined {
   return branchName.length > 0 ? branchName : undefined;
 }
 
+// The branch most recently checked out before the current one, i.e. `@{-1}`.
+export function getPreviousBranchName(): string | undefined {
+  const branchName = runGitCommand({
+    args: [`rev-parse`, `--abbrev-ref`, `@{-1}`],
+    onError: 'ignore',
+    resource: 'getPreviousBranchName',
+  });
+
+  return branchName.length > 0 && branchName !== '@{-1}'
+    ? branchName
+    : undefined;
+}
+
 export function moveBranch(newName: string): void {
   runGitCommand({
     args: [`branch`, `-m`, newName],

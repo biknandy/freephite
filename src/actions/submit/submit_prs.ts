@@ -5,6 +5,7 @@ import { ExitFailedError } from '../../lib/errors';
 import { Unpacked } from '../../lib/utils/ts_helpers';
 
 import { Octokit } from '@octokit/core';
+import { getOctokit } from '../../lib/api/octokit';
 
 const submitPullRequestsParams = {
   authToken: t.optional(t.string),
@@ -132,14 +133,7 @@ async function requestServerToSubmitPRs({
   submissionInfo: TPRSubmissionInfo;
   context: TContext;
 }): Promise<TSubmittedPR[]> {
-  const auth = context.userConfig.getFPAuthToken();
-  if (!auth) {
-    throw new Error(
-      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>` then try again.'
-    );
-  }
-
-  const octokit = new Octokit({ auth });
+  const octokit = getOctokit(context.userConfig);
 
   const owner = context.repoConfig.getRepoOwner();
   const repo = context.repoConfig.getRepoName();
@@ -147,18 +141,9 @@ async function requestServerToSubmitPRs({
   const prs = [];
   for (const info of submissionInfo) {
     if (info.action === 'create') {
-      const response = await octokit.request(
-        `POST /repos/{owner}/{repo}/pulls`,
-        {
-          owner,
-          repo,
-          title: info.title,
-          body: info.body,
-          head: info.head,
-          base: info.base,
-          draft: info.draft,
-          headers: { 'X-GitHub-Api-Version': '2022-11-28' },
-        }
+      const response = await createPrOrAdoptExisting(
+        { octokit, owner, repo, info },
+        context
       );
       await requestReviewers(
         { octokit, owner, repo, prNumber: response.data.number, info },
@@ -206,6 +191,67 @@ async function requestServerToSubmitPRs({
       },
     };
   });
+}
+
+// GitHub rejects PR creation with a 422 when an open PR already exists for
+// the head branch (e.g. it was opened on github.com or local metadata was
+// lost). Recover by adopting that PR and updating it instead.
+async function createPrOrAdoptExisting(
+  args: {
+    octokit: Octokit;
+    owner: string;
+    repo: string;
+    info: TSubmittedPRRequest & { action: 'create' };
+  },
+  context: TContext
+) {
+  const { octokit, owner, repo, info } = args;
+  try {
+    return await octokit.request(`POST /repos/{owner}/{repo}/pulls`, {
+      owner,
+      repo,
+      title: info.title,
+      body: info.body,
+      head: info.head,
+      base: info.base,
+      draft: info.draft,
+      headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+    });
+  } catch (err) {
+    if (
+      err?.status !== 422 ||
+      !String(err?.message).includes('already exists')
+    ) {
+      throw err;
+    }
+    const existing = await octokit.request('GET /repos/{owner}/{repo}/pulls', {
+      owner,
+      repo,
+      head: `${owner}:${info.head}`,
+      state: 'open',
+      per_page: 1,
+      headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+    });
+    const pr = existing.data[0];
+    if (!pr) {
+      throw err;
+    }
+    context.splog.warn(
+      `A PR for ${info.head} already exists (#${pr.number}); updating it instead.`
+    );
+    return await octokit.request(
+      `PATCH /repos/{owner}/{repo}/pulls/{pull_number}`,
+      {
+        owner,
+        repo,
+        pull_number: pr.number,
+        title: info.title,
+        body: info.body,
+        base: info.base,
+        headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+      }
+    );
+  }
 }
 
 async function requestReviewers(

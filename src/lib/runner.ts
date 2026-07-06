@@ -24,6 +24,9 @@ import { composeGit } from './git/git';
 import { TGlobalArguments } from './global_arguments';
 import { tracer } from './utils/tracer';
 import { CommandFailedError, CommandKilledError } from './git/runner';
+import { getBranchNamesAndRevisions } from './git/sorted_branch_names';
+import { getMetadataRefList } from './engine/metadata_ref';
+import { undoSnapshotsConfigFactory } from './spiffy/undo_snapshots_spf';
 
 export async function graphite(
   args: yargs.Arguments & TGlobalArguments,
@@ -109,6 +112,125 @@ async function graphiteInternal(
   }
 }
 
+// Commands that are safe to run while a Graphite command is suspended on a
+// rebase conflict: the commands that resolve the conflict, plus read-only
+// commands that don't mutate branches or metadata.
+const PENDING_CONTINUATION_SAFE_COMMANDS = new Set([
+  'continue',
+  'abort',
+  'log',
+  'log short',
+  'log long',
+  'info',
+  'branch info',
+  'children',
+  'parent',
+  'trunk',
+  'repo name',
+  'repo owner',
+  'repo trunk',
+  'repo remote',
+  'repo pr-templates',
+  'docs',
+  'dash',
+  'dash pr',
+  'pr',
+  'auth',
+  'auth-fp',
+  'dev cache',
+  'dev meta',
+  'user branch-date',
+  'user branch-prefix',
+  'user branch-replacement',
+  'user editor',
+  'user pager',
+  'user restack-date',
+  'user submit-body',
+  'user tips',
+]);
+
+// Commands whose effects on local branches and metadata can be undone with
+// `gt undo`. A snapshot of all branch refs and metadata is taken before the
+// command runs. (`continue` is intentionally absent: the interrupted command
+// already snapshotted the state it started from.)
+const UNDO_CAPTURED_COMMANDS = new Set([
+  'absorb',
+  'branch create',
+  'branch delete',
+  'branch edit',
+  'branch fold',
+  'branch rename',
+  'branch restack',
+  'branch split',
+  'branch squash',
+  'branch track',
+  'branch unbranch',
+  'branch untrack',
+  'commit amend',
+  'commit create',
+  'create',
+  'delete',
+  'downstack edit',
+  'downstack get',
+  'downstack restack',
+  'downstack track',
+  'fold',
+  'get',
+  'modify',
+  'move',
+  'pop',
+  'rename',
+  'reorder',
+  'repo sync',
+  'restack',
+  'revert',
+  'split',
+  'squash',
+  'stack restack',
+  'sync',
+  'track',
+  'untrack',
+  'upstack onto',
+  'upstack restack',
+]);
+
+function captureUndoSnapshot(context: TContext, canonicalName: string): void {
+  try {
+    if (
+      !UNDO_CAPTURED_COMMANDS.has(canonicalName) ||
+      context.engine.rebaseInProgress()
+    ) {
+      return;
+    }
+    const metadata = getMetadataRefList();
+    undoSnapshotsConfigFactory.load().push({
+      command: canonicalName,
+      timestampMs: Date.now(),
+      currentBranchName: context.engine.currentBranch,
+      branches: Object.entries(getBranchNamesAndRevisions()).map(
+        ([name, revision]) => ({
+          name,
+          revision,
+          metadata: metadata[name],
+        })
+      ),
+    });
+  } catch (err) {
+    // Undo bookkeeping must never break the command itself.
+    context.splog.debug(`Failed to capture undo snapshot: ${err}`);
+  }
+}
+
+function hasPendingContinuation(context: TContext): boolean {
+  const data = context.continueConfig.data;
+  return (
+    context.engine.rebaseInProgress() ||
+    (data.branchesToRestack?.length ?? 0) > 0 ||
+    (data.branchesToSync?.length ?? 0) > 0 ||
+    data.rebasedBranchBase !== undefined
+  );
+}
+
 // eslint-disable-next-line max-params
 async function graphiteHelper(
   canonicalName: string,
@@ -124,6 +246,22 @@ async function graphiteHelper(
     refreshPRInfoInBackground(context);
 
     if (
+      !PENDING_CONTINUATION_SAFE_COMMANDS.has(canonicalName) &&
+      hasPendingContinuation(context)
+    ) {
+      throw new PreconditionsFailedError(
+        [
+          `A Graphite command is still in progress (interrupted by a rebase conflict).`,
+          `Complete it with ${chalk.cyan(
+            'gt continue'
+          )} or cancel it with ${chalk.cyan(
+            'gt abort'
+          )} before running other commands.`,
+        ].join('\n')
+      );
+    }
+
+    if (
       !['repo init', 'init'].includes(canonicalName) &&
       !context.repoConfig.graphiteInitialized()
     ) {
@@ -134,6 +272,7 @@ async function graphiteHelper(
       await init({}, context);
     }
 
+    captureUndoSnapshot(context, canonicalName);
     await handler.run(context);
   } catch (err) {
     if (

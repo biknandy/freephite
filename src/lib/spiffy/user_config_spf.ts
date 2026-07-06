@@ -12,6 +12,7 @@ const schema = t.shape({
   ),
   authToken: t.optional(t.string),
   fpAuthToken: t.optional(t.string),
+  githubApiUrl: t.optional(t.string),
   tips: t.optional(t.boolean),
   editor: t.optional(t.string),
   pager: t.optional(t.string),
@@ -117,6 +118,16 @@ export const userConfigFactory = spiffy({
       return getDefaultProfile().fpAuthToken;
     };
 
+    // GitHub REST/GraphQL endpoint; override for GitHub Enterprise (e.g.
+    // https://github.example.com/api/v3) or for tests.
+    const getGitHubApiUrl = (): string => {
+      return (
+        process.env.GT_GITHUB_API_URL ??
+        data.githubApiUrl ??
+        'https://api.github.com'
+      );
+    };
+
     const getEditor = () => {
       return (
         process.env.GT_EDITOR ?? // single command override
@@ -150,6 +161,7 @@ export const userConfigFactory = spiffy({
       getAppServerUrl,
       getAuthToken,
       getFPAuthToken,
+      getGitHubApiUrl,
       getPager,
       execEditor: (editFilePath: string) => {
         const command = `${getEditor()} ${editFilePath}`;

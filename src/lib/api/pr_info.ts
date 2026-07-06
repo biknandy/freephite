@@ -2,6 +2,7 @@ import * as t from '@withgraphite/retype';
 import { TUserConfig } from '../spiffy/user_config_spf';
 import { TRepoParams } from './common_params';
 import { Octokit } from '@octokit/core';
+import { getOctokit } from './octokit';
 
 const pullRequestInfoResponse = {
   prs: t.array(
@@ -73,14 +74,7 @@ export async function getPrInfoForBranches(
     }
   });
 
-  const auth = userConfig.getFPAuthToken();
-  if (!auth) {
-    throw new Error(
-      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>` then try again.'
-    );
-  }
-
-  const octokit = new Octokit({ auth });
+  const octokit = getOctokit(userConfig);
 
   const selections = [
     ...[...existingPrInfo.keys()].map(

@@ -148,6 +148,13 @@ export async function pullTrunk(
       )}.`
     );
   } else {
+    if (!context.interactive) {
+      context.splog.error(
+        `Run ${chalk.cyan('gt sync -f')} to overwrite ${chalk.yellow(
+          context.engine.trunk
+        )} with the version from remote.`
+      );
+    }
     throw new KilledError();
   }
 }

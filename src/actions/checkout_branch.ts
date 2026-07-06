@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { TContext } from '../lib/context';
+import { ExitFailedError } from '../lib/errors';
 import { SCOPE } from '../lib/engine/scope_spec';
 import { interactiveBranchSelection } from './log';
 
@@ -13,6 +14,12 @@ export async function checkoutBranch(
   },
   context: TContext
 ): Promise<void> {
+  if (branchName === '-' || branchName === '@{-1}') {
+    branchName = context.engine.getPreviousBranchName();
+    if (!branchName) {
+      throw new ExitFailedError(`No previous branch to check out.`);
+    }
+  }
   if (!branchName) {
     branchName = await interactiveBranchSelection(
       {
