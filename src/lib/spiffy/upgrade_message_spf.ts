@@ -8,6 +8,7 @@ const schema = t.shape({
       cliVersion: t.string,
     })
   ),
+  lastCheckedMs: t.optional(t.number),
 });
 
 export const messageConfigFactory = spiffy({

@@ -1,3 +1,4 @@
 #!/bin/bash
+set -euo pipefail
 
-npm uninstall --location=global @withgraphite/graphite-cli
+npm uninstall --location=global @bradymadden97/freephite-cli
