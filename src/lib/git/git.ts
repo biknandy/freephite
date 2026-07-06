@@ -1,4 +1,4 @@
-import { addAll } from './add_all';
+import { addAll, addUpdatedFiles } from './add_all';
 import {
   deleteBranch,
   forceCheckoutNewBranch,
@@ -62,6 +62,7 @@ function composeGitInternal() {
   return {
     ...composeGetRemoteSha(),
     addAll,
+    addUpdatedFiles,
     getCommitAuthor,
     getCommitDate,
     getFilesChanged,

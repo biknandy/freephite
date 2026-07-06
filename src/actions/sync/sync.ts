@@ -14,6 +14,7 @@ export async function syncAction(
     delete: boolean;
     showDeleteProgress: boolean;
     restack: boolean;
+    forceDelete?: boolean;
   },
   context: TContext
 ): Promise<void> {
@@ -33,7 +34,10 @@ export async function syncAction(
       `🧹 Checking if any branches have been merged/closed and can be deleted...`
     );
     const branchesWithNewParents = await cleanBranches(
-      { showDeleteProgress: opts.showDeleteProgress, force: opts.force },
+      {
+        showDeleteProgress: opts.showDeleteProgress,
+        force: opts.force || (opts.forceDelete ?? false),
+      },
       context
     );
     context.splog.tip(

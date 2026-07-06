@@ -27,7 +27,7 @@ void yargs(getYargsInput())
   .commandDir('commands')
   .help()
   .usage(
-    'Graphite is a command line tool that makes working with stacked changes fast & intuitive.\n\nhttps://docs.graphite.dev/guides/graphite-cli'
+    'Freephite (gt/fp) is a fork of the Graphite CLI that talks directly to GitHub - no Graphite account needed - and makes working with stacked changes fast & intuitive.\n\nhttps://github.com/biknandy/freephite'
   )
   .options(globalArgumentsOptions)
   .global(Object.keys(globalArgumentsOptions))

@@ -1,8 +1,7 @@
 import yargs from 'yargs';
 
 export const command = 'stack <command>';
-export const desc =
-  'Commands that operate on your current stack of branches. Run `fp stack --help` to learn more.';
+export const desc = false;
 export const aliases = ['s'];
 export const builder = function (yargs: yargs.Argv): yargs.Argv {
   return yargs

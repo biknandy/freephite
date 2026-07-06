@@ -1,8 +1,7 @@
 import yargs from 'yargs';
 
 export const command = 'upstack <command>';
-export const desc =
-  'Commands that operate on a branch and its descendants. Run `fp upstack --help` to learn more.';
+export const desc = false;
 export const aliases = ['us'];
 export const builder = function (yargs: yargs.Argv): yargs.Argv {
   return yargs

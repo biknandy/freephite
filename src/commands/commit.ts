@@ -1,10 +1,8 @@
 import { Argv } from 'yargs';
 
 export const command = 'commit <command>';
-export const desc =
-  'Commands that operate on commits. Run `fp commit --help` to learn more.';
+export const desc = false;
 
-export const aliases = ['c'];
 export const builder = function (yargs: Argv): Argv {
   return yargs
     .commandDir('commit-commands', {

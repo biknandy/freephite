@@ -7,3 +7,11 @@ export function addAll(): void {
     resource: 'addAll',
   });
 }
+
+export function addUpdatedFiles(): void {
+  runGitCommand({
+    args: ['add', '--update'],
+    onError: 'throw',
+    resource: 'addUpdatedFiles',
+  });
+}

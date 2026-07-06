@@ -2,8 +2,7 @@ import { Argv } from 'yargs';
 
 export const aliases = ['r'];
 export const command = 'repo <command>';
-export const desc =
-  "Read or write Graphite's configuration settings for the current repo. Run `fp repo --help` to learn more.";
+export const desc = false;
 
 export const builder = function (yargs: Argv): Argv {
   return yargs

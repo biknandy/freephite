@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { TContext } from '../lib/context';
-import { RebaseConflictError } from '../lib/errors';
+import { BlockedDuringRebaseError, RebaseConflictError } from '../lib/errors';
 import { assertUnreachable } from '../lib/utils/assert_unreachable';
 import { persistContinuation } from './persist_continuation';
 import { printConflictStatus } from './print_conflict_status';
@@ -9,6 +9,9 @@ export function restackBranches(
   branchNames: string[],
   context: TContext
 ): void {
+  if (context.engine.rebaseInProgress()) {
+    throw new BlockedDuringRebaseError();
+  }
   context.splog.debug(
     branchNames.reduce((acc, curr) => `${acc}\n${curr}`, 'RESTACKING:')
   );

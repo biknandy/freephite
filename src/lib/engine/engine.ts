@@ -93,6 +93,7 @@ export type TEngine = {
   squashCurrentBranch: (opts: { message?: string; noEdit?: boolean }) => void;
 
   addAll: () => void;
+  addUpdatedFiles: () => void;
   detach: () => void;
   unbranch: () => void;
   detachAndResetBranchChanges: () => void;
@@ -122,7 +123,7 @@ export type TEngine = {
         branchName: string;
       }
     | { result: 'REBASE_CONFLICT' };
-  abortRebase: () => void;
+  abortRebase: (branchToRestore?: string) => void;
 
   isMergedIntoTrunk: (branchName: string) => boolean;
   isBranchFixed: (branchName: string) => boolean;
@@ -749,6 +750,7 @@ export function composeEngine({
       };
     },
     addAll: git.addAll,
+    addUpdatedFiles: git.addUpdatedFiles,
     detach() {
       const branchName = getCurrentBranchOrThrow();
       const cachedMeta = assertBranchIsValidAndNotTrunkAndGetMeta(branchName);
@@ -886,8 +888,16 @@ export function composeEngine({
       handleSuccessfulRebase(branchName, parentBranchRevision);
       return { result, branchName };
     },
-    abortRebase: () => {
+    abortRebase: (branchToRestore?: string) => {
       git.rebaseAbort();
+      // The cache's currentBranch may be a stale continuation override, so
+      // bypass checkoutBranch's no-op shortcut and sync with git directly.
+      if (branchToRestore && branchExists(branchToRestore)) {
+        git.switchBranch(branchToRestore);
+        cache.currentBranch = branchToRestore;
+      } else {
+        cache.currentBranch = git.getCurrentBranchName();
+      }
     },
     isMergedIntoTrunk: (branchName: string) => {
       assertBranch(branchName);

@@ -1,10 +1,8 @@
 import { Argv } from 'yargs';
 
 export const command = 'branch <command>';
-export const desc =
-  'Commands that operate on your current branch. Run `fp branch --help` to learn more.';
+export const desc = false;
 
-export const aliases = ['b'];
 export const builder = function (yargs: Argv): Argv {
   return yargs
     .commandDir('branch-commands', {
