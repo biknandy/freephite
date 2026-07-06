@@ -40,10 +40,14 @@ The command surface matches the modern Graphite CLI
 | Create a branch, stage all, commit | `gt create --all --message "msg"` | `gt c -am "msg"` |
 | Amend staged changes into current branch | `gt modify --all` | `gt m -a` |
 | Add a new commit to current branch | `gt modify --commit --all -m "msg"` | `gt m -cam "msg"` |
+| Absorb staged fixes into the stack's branches | `gt absorb` | |
 | Push PRs for current branch + downstack | `gt submit` | |
 | Push PRs for the whole stack | `gt submit --stack` | `gt ss` |
+| Merge the PRs from trunk to current branch | `gt merge` | |
 | Pull trunk, delete merged branches, restack | `gt sync` | |
-| Switch branches | `gt checkout` | `gt co` |
+| Undo the last gt mutation (run again to redo) | `gt undo` | |
+| Revert a trunk commit on a new branch | `gt revert <sha>` | |
+| Switch branches | `gt checkout` (`gt co -` for previous) | `gt co` |
 | Move up/down the stack | `gt up` / `gt down` / `gt top` / `gt bottom` | `gt u` / `gt d` / `gt t` / `gt b` |
 | View your stacks | `gt log` / `gt log short` / `gt log long` | `gt ls` / `gt ll` |
 | Rebase branch onto a new parent | `gt move --onto <branch>` | |
@@ -69,10 +73,22 @@ The legacy noun-verb surface from graphite-cli v0.x (`gt branch create`, `gt sta
 submit`, `gt repo sync`, ...) and its shortcuts (`bc`, `bco`, `ca`, `sr`, `ss`, `dsg`,
 `rs`, ...) still work - they are just hidden from `--help`.
 
-### Not supported (Graphite-server features)
+### Notes on parity with the paid Graphite CLI
 
-`gt merge` (merge queue), `gt undo`, `gt absorb`, `gt freeze`/`gt unfreeze`,
-`gt aliases`, `gt dash` (opens Graphite's web app), and the `--ai` flags.
+- `gt merge` merges the stack's PRs bottom-up **via the GitHub API** (no merge
+  queue): it retargets each PR to trunk, waits for mergeability, merges with the
+  repo's preferred method, and restacks + pushes the branches above in between.
+- `gt undo` restores branches and stack metadata from a snapshot taken before
+  each mutating command; running it again redoes the change.
+- `gt absorb` attributes each staged hunk to the branch whose commits last
+  modified those lines (via blame), amends it in, and restacks; unattributable
+  hunks stay staged.
+- GitHub Enterprise works by pointing the CLI at your API endpoint:
+  `GT_GITHUB_API_URL=https://github.example.com/api/v3` (env var), or persist it
+  in `~/.graphite_user_config` under `githubApiUrl`.
+
+Not supported: `gt freeze`/`gt unfreeze`, `gt aliases`, `gt dash` (opens
+Graphite's web app), and the `--ai` flags.
 
 ## How PR submission works
 

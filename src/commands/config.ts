@@ -1,8 +1,9 @@
 import { Argv } from 'yargs';
 
-export const command = 'user <command>';
+export const command = 'config <command>';
 export const desc =
-  "Read or write Graphite's user configuration settings. Run `fp user --help` to learn more.";
+  'Configure the Graphite CLI. Run `gt config --help` to see the available settings.';
+export const aliases = ['user'];
 
 export const builder = function (yargs: Argv): Argv {
   return yargs
