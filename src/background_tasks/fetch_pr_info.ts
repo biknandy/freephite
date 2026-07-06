@@ -36,7 +36,7 @@ export async function getPrInfoToUpsert({
   repoConfig: TRepoConfig;
 }): Promise<TPRInfoToUpsert> {
   const { authToken, repoName, repoOwner } = {
-    authToken: userConfig.getAuthToken(),
+    authToken: userConfig.getFPAuthToken(),
     repoName: repoConfig.getRepoName(),
     repoOwner: repoConfig.getRepoOwner(),
   };
@@ -52,7 +52,6 @@ export async function getPrInfoToUpsert({
   return await getPrInfoForBranches(
     branchNamesWithExistingPrNumbers,
     {
-      authToken,
       repoName,
       repoOwner,
     },
@@ -62,8 +61,6 @@ export async function getPrInfoToUpsert({
 
 async function refreshPRInfo(): Promise<void> {
   const loaded = prInfoConfigFactory.load();
-  // eslint-disable-next-line no-console
-  console.log('refreshPRInfo:', loaded);
   try {
     const prInfoToUpsert = await getPrInfoToUpsert({
       userConfig: userConfigFactory.load(),

@@ -35,6 +35,7 @@ const submitPullRequestsParams = {
         body: t.optional(t.string),
         prNumber: t.number,
         draft: t.optional(t.boolean),
+        reviewers: t.optional(t.array(t.string)),
       }),
     ])
   ),
@@ -74,18 +75,12 @@ type TSubmittedPR = {
 };
 
 export async function submitPullRequest(
-  args: {
-    submissionInfo: TPRSubmissionInfo;
-    mergeWhenReady: boolean;
-    trunkBranchName: string;
-  },
+  args: { submissionInfo: TPRSubmissionInfo },
   context: TContext
 ): Promise<void> {
   const pr = (
     await requestServerToSubmitPRs({
       submissionInfo: args.submissionInfo,
-      mergeWhenReady: args.mergeWhenReady,
-      trunkBranchName: args.trunkBranchName,
       context,
     })
   )[0];
@@ -110,7 +105,7 @@ export async function submitPullRequest(
           reviewDecision: 'REVIEW_REQUIRED', // Because we just opened this PR
         }
       : {}),
-    ...(pr.request.draft !== undefined ? { draft: pr.request.draft } : {}),
+    ...(pr.request.draft !== undefined ? { isDraft: pr.request.draft } : {}),
   });
   context.splog.info(
     `${chalk.green(pr.response.head)}: ${pr.response.prURL} (${{
@@ -132,19 +127,15 @@ function parseSubmitError(error: string): string {
 // Leaving the function plural in case we want to revert.
 async function requestServerToSubmitPRs({
   submissionInfo,
-  mergeWhenReady: __mergeWhenReady,
-  trunkBranchName: __trunkBranchName,
   context,
 }: {
   submissionInfo: TPRSubmissionInfo;
-  mergeWhenReady: boolean;
-  trunkBranchName: string;
   context: TContext;
 }): Promise<TSubmittedPR[]> {
   const auth = context.userConfig.getFPAuthToken();
   if (!auth) {
     throw new Error(
-      'No freephite auth token found. Run `fp auth-fp -t <YOUR_GITHUB_TOKEN>` then try again.'
+      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>` then try again.'
     );
   }
 
@@ -156,8 +147,9 @@ async function requestServerToSubmitPRs({
   const prs = [];
   for (const info of submissionInfo) {
     if (info.action === 'create') {
-      prs.push(
-        await octokit.request(`POST /repos/{owner}/{repo}/pulls`, {
+      const response = await octokit.request(
+        `POST /repos/{owner}/{repo}/pulls`,
+        {
           owner,
           repo,
           title: info.title,
@@ -166,25 +158,34 @@ async function requestServerToSubmitPRs({
           base: info.base,
           draft: info.draft,
           headers: { 'X-GitHub-Api-Version': '2022-11-28' },
-        })
+        }
       );
+      await requestReviewers(
+        { octokit, owner, repo, prNumber: response.data.number, info },
+        context
+      );
+      prs.push(response);
     }
 
     if (info.action === 'update') {
-      prs.push(
-        await octokit.request(
-          `PATCH /repos/{owner}/{repo}/pulls/{pull_number}`,
-          {
-            owner,
-            repo,
-            pull_number: info.prNumber,
-            title: info.title,
-            body: info.body,
-            base: info.base,
-            headers: { 'X-GitHub-Api-Version': '2022-11-28' },
-          }
-        )
+      const response = await octokit.request(
+        `PATCH /repos/{owner}/{repo}/pulls/{pull_number}`,
+        {
+          owner,
+          repo,
+          pull_number: info.prNumber,
+          title: info.title,
+          body: info.body,
+          base: info.base,
+          headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+        }
       );
+      await syncDraftState({ octokit, info, response: response.data }, context);
+      await requestReviewers(
+        { octokit, owner, repo, prNumber: info.prNumber, info },
+        context
+      );
+      prs.push(response);
     }
   }
 
@@ -205,4 +206,68 @@ async function requestServerToSubmitPRs({
       },
     };
   });
+}
+
+async function requestReviewers(
+  args: {
+    octokit: Octokit;
+    owner: string;
+    repo: string;
+    prNumber: number;
+    info: TSubmittedPRRequest;
+  },
+  context: TContext
+): Promise<void> {
+  const reviewers = 'reviewers' in args.info ? args.info.reviewers : undefined;
+  if (!reviewers?.length) {
+    return;
+  }
+  try {
+    await args.octokit.request(
+      'POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers',
+      {
+        owner: args.owner,
+        repo: args.repo,
+        pull_number: args.prNumber,
+        reviewers,
+        headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+      }
+    );
+  } catch (err) {
+    context.splog.warn(
+      `Failed to request reviewers for ${args.info.head}: ${parseSubmitError(
+        err.message ?? String(err)
+      )}`
+    );
+  }
+}
+
+// The REST PATCH endpoint cannot toggle draft state; GitHub only exposes
+// these transitions via GraphQL mutations.
+async function syncDraftState(
+  args: {
+    octokit: Octokit;
+    info: TSubmittedPRRequest & { action: 'update' };
+    response: { node_id: string; draft?: boolean };
+  },
+  context: TContext
+): Promise<void> {
+  const targetDraft = args.info.draft;
+  if (targetDraft === undefined || args.response.draft === targetDraft) {
+    return;
+  }
+  try {
+    await args.octokit.graphql(
+      targetDraft
+        ? `mutation ($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { clientMutationId } }`
+        : `mutation ($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { clientMutationId } }`,
+      { id: args.response.node_id }
+    );
+  } catch (err) {
+    context.splog.warn(
+      `Failed to ${
+        targetDraft ? 'convert to draft' : 'mark ready for review'
+      }: ${parseSubmitError(err.message ?? String(err))}`
+    );
+  }
 }

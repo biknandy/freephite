@@ -42,7 +42,7 @@ export async function trackBranchInteractive(
   }
 
   trackHelper({ branchName, parentBranchName }, context);
-  await checkoutBranch(branchName, context);
+  await checkoutBranch({ branchName }, context);
   return true;
 }
 

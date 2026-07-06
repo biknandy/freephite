@@ -6,8 +6,7 @@ export async function syncPrInfo(
   branchNames: string[],
   context: TContext
 ): Promise<TPRInfoToUpsert> {
-  const authToken = context.userConfig.getAuthToken();
-  if (authToken === undefined) {
+  if (context.userConfig.getFPAuthToken() === undefined) {
     return [];
   }
 
@@ -17,7 +16,6 @@ export async function syncPrInfo(
       prNumber: context.engine.getPrInfo(branchName)?.number,
     })),
     {
-      authToken,
       repoName: context.repoConfig.getRepoName(),
       repoOwner: context.repoConfig.getRepoOwner(),
     },

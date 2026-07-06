@@ -53,7 +53,7 @@ export async function getPrInfoForBranches(
   const auth = userConfig.getFPAuthToken();
   if (!auth) {
     throw new Error(
-      'No freephite auth token found. Run `fp auth-fp -t <YOUR_GITHUB_TOKEN>` then try again.'
+      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>` then try again.'
     );
   }
 
@@ -153,14 +153,45 @@ export async function getPrInfoForBranches(
     )
   );
 
-  // TODO: Need to implement the same fetching for `branchesWithoutPrInfo`
-  // for (const ref of branchesWithoutPrInfo.values()) {
-  //   requests.push(...)
-  // }
+  // Discover open PRs for branches that don't have an associated PR number.
+  const discovered = await Promise.all(
+    [...branchesWithoutPrInfo].map((branchName) =>
+      octokit
+        .request('GET /repos/{owner}/{repo}/pulls', {
+          owner: params.repoOwner,
+          repo: params.repoName,
+          head: `${params.repoOwner}:${branchName}`,
+          state: 'open',
+          per_page: 1,
+          headers: {
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        })
+        .then(
+          (response) => {
+            const pr = response.data[0];
+            return pr
+              ? ({
+                  prNumber: pr.number,
+                  title: pr.title,
+                  body: pr.body ?? '',
+                  state: 'OPEN',
+                  reviewDecision: null,
+                  headRefName: pr.head.ref,
+                  baseRefName: pr.base.ref,
+                  url: pr.html_url,
+                  isDraft: pr.draft ?? false,
+                } as const)
+              : null;
+          },
+          () => null
+        )
+    )
+  );
 
   /** Filter nulls, typescript */
   const prs: TPRInfoToUpsert = [];
-  for (const pr of responses) {
+  for (const pr of [...responses, ...discovered]) {
     if (pr) {
       prs.push(pr);
     }

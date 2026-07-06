@@ -2,10 +2,7 @@ import chalk from 'chalk';
 import { getDownstackDependencies } from '../../lib/api/get_downstack_dependencies';
 import { TContext } from '../../lib/context';
 import { KilledError, RebaseConflictError } from '../../lib/errors';
-import {
-  cliAuthPrecondition,
-  uncommittedTrackedChangesPrecondition,
-} from '../../lib/preconditions';
+import { uncommittedTrackedChangesPrecondition } from '../../lib/preconditions';
 import { assertUnreachable } from '../../lib/utils/assert_unreachable';
 import { persistContinuation } from '../persist_continuation';
 import { printConflictStatus } from '../print_conflict_status';
@@ -29,16 +26,10 @@ export async function getAction(
   );
   context.splog.newline();
 
-  const authToken = cliAuthPrecondition(context);
   const downstackToSync = await getDownstackDependencies(
     {
       branchName: args.branchName ?? context.engine.currentBranchPrecondition,
       trunkName: context.engine.trunk,
-    },
-    {
-      authToken,
-      repoName: context.repoConfig.getRepoName(),
-      repoOwner: context.repoConfig.getRepoOwner(),
     },
     context
   );

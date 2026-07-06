@@ -49,11 +49,7 @@ export function testStack(
     )
   );
 
-  context.splog.info(
-    `Output files: ${chalk.gray(
-      `/var/folders/gg/xctw127s4hs8gzlcdtghgzdr0000gn/T/tmp-31480-L1GLB4ngiQkT/`
-    )}`
-  );
+  context.splog.info(`Output files: ${chalk.gray(tmpDirName)}`);
 
   // Finish off.
   context.engine.checkoutBranch(currentBranch);

@@ -1,12 +1,8 @@
-// Why does an open source CLI include telemetry?
-// We the creators want to understand how people are using the tool
-// All metrics logged are listed plain to see, and are non blocking in case the server is unavailable.
 import yargs from 'yargs';
 import chalk from 'chalk';
 import { version } from '../../package.json';
 import { init } from '../actions/init';
 import { refreshPRInfoInBackground } from '../background_tasks/fetch_pr_info';
-import { fetchUpgradePromptInBackground } from '../background_tasks/upgrade_prompt';
 import {
   initContext,
   initContextLite,
@@ -89,7 +85,6 @@ async function graphiteInternal(
         },
       },
       async () => {
-        fetchUpgradePromptInBackground(contextLite);
         if (!handlerMaybeWithCacheLock.repo) {
           await handlerMaybeWithCacheLock.run(contextLite);
           return;
@@ -129,7 +124,7 @@ async function graphiteHelper(
     refreshPRInfoInBackground(context);
 
     if (
-      canonicalName !== 'repo init' &&
+      !['repo init', 'init'].includes(canonicalName) &&
       !context.repoConfig.graphiteInitialized()
     ) {
       context.splog.info(
@@ -146,7 +141,9 @@ async function graphiteHelper(
       context.engine.rebaseInProgress()
     ) {
       throw new DetachedError(
-        `Did you mean to run ${chalk.cyan(`fp continue`)}?`
+        `Did you mean to run ${chalk.cyan(`gt continue`)} or ${chalk.cyan(
+          `gt abort`
+        )}?`
       );
     }
     throw err;

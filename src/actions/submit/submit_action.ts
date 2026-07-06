@@ -34,6 +34,11 @@ export async function submitAction(
       `Can't use both --publish and --draft flags in one command`
     );
   }
+  if (args.mergeWhenReady) {
+    context.splog.warn(
+      `--merge-when-ready is not supported by freephite (it requires the Graphite merge queue); ignoring.`
+    );
+  }
   const populateRemoteShasPromise = context.engine.populateRemoteShas();
   if (args.dryRun) {
     context.splog.info(
@@ -122,7 +127,7 @@ export async function submitAction(
             `Force-with-lease push of ${chalk.yellow(
               submissionInfo.head
             )} failed due to external changes to the remote branch.`,
-            'If you are collaborating on this stack, try `fp downstack get` to pull in changes.',
+            'If you are collaborating on this stack, try `gt get` to pull in changes.',
             'Alternatively, use the `--force` option of this command to bypass the stale info warning.',
           ].join('\n')
         );
@@ -130,20 +135,13 @@ export async function submitAction(
       throw err;
     }
 
-    await submitPullRequest(
-      {
-        submissionInfo: [submissionInfo],
-        mergeWhenReady: args.mergeWhenReady,
-        trunkBranchName: context.engine.trunk,
-      },
-      context
-    );
+    await submitPullRequest({ submissionInfo: [submissionInfo] }, context);
   }
 
   const auth = context.userConfig.getFPAuthToken();
   if (!auth) {
     throw new Error(
-      'No freephite auth token found. Run `fp auth-fp -t <YOUR_GITHUB_TOKEN>` then try again.'
+      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>` then try again.'
     );
   }
 

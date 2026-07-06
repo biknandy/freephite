@@ -11,7 +11,7 @@ for (const scene of [new BasicScene()]) {
         scene.repo.runCliCommand([`auth`, `-t`, `${authToken}`])
       ).to.not.throw(Error);
       expect(scene.repo.runCliCommandAndGetOutput([`auth`])).to.equal(
-        authToken
+        `Auth token is set (SUPE...OKEN).`
       );
     });
 
@@ -25,7 +25,17 @@ for (const scene of [new BasicScene()]) {
         scene.repo.runCliCommand([`auth`, `-t`, `${authTokenNew}`])
       ).to.not.throw(Error);
       expect(scene.repo.runCliCommandAndGetOutput([`auth`])).to.equal(
-        authTokenNew
+        `Auth token is set (SUPE..._NEW).`
+      );
+    });
+
+    it('auth-fp remains a compatible alias', () => {
+      const authToken = 'SUPER_SECRET_AUTH_TOKEN';
+      expect(() =>
+        scene.repo.runCliCommand([`auth-fp`, `-t`, `${authToken}`])
+      ).to.not.throw(Error);
+      expect(scene.repo.runCliCommandAndGetOutput([`auth`])).to.equal(
+        `Auth token is set (SUPE...OKEN).`
       );
     });
   });
