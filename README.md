@@ -21,12 +21,19 @@ Requires Node.js >= 18.
 
 ## Setup
 
+If the machine already has GitHub credentials — a `GITHUB_TOKEN` / `GH_TOKEN`
+env var, or a logged-in `gh` CLI — freephite picks them up automatically and
+no auth step is needed. Otherwise:
+
 ```sh
 # Get a GitHub access token from https://github.com/settings/tokens
 # (classic token with `repo` scope)
 gt auth -t <YOUR_GITHUB_ACCESS_TOKEN>
+```
 
-# Then, inside a repo:
+Then, inside a repo:
+
+```sh
 gt init
 ```
 

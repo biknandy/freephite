@@ -29,11 +29,22 @@ export const handler = async (argv: argsT): Promise<void> => {
       return;
     }
 
-    const existing = context.userConfig.getFPAuthToken();
+    const stored = context.userConfig.getStoredFPAuthToken();
+    if (stored) {
+      context.splog.info(
+        `Auth token is set (${stored.slice(0, 4)}...${stored.slice(-4)}).`
+      );
+      return;
+    }
+
+    const ambient = context.userConfig.getFPAuthToken();
     context.splog.info(
-      existing
-        ? `Auth token is set (${existing.slice(0, 4)}...${existing.slice(-4)}).`
-        : 'No auth token set. Run `gt auth -t <YOUR_GITHUB_TOKEN>` to set one.'
+      ambient
+        ? `No auth token stored, but found ambient GitHub credentials (${ambient.slice(
+            0,
+            4
+          )}...${ambient.slice(-4)}) via GITHUB_TOKEN/GH_TOKEN or the gh CLI.`
+        : 'No auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>`, set GITHUB_TOKEN, or log in with `gh auth login`.'
     );
   });
 };

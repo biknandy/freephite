@@ -114,8 +114,43 @@ export const userConfigFactory = spiffy({
       return getDefaultProfile().authToken;
     };
 
-    const getFPAuthToken = (): string | undefined => {
+    const getStoredFPAuthToken = (): string | undefined => {
       return getDefaultProfile().fpAuthToken;
+    };
+
+    // Fall back to the ambient GitHub credentials (env vars, then the `gh`
+    // CLI) so that machines already authed with GitHub need no `gt auth`.
+    // GT_NO_AMBIENT_AUTH disables this (the test harness sets it so tests
+    // never pick up the developer's real credentials).
+    let ambientTokenResolved = false;
+    let ambientToken: string | undefined;
+    const getAmbientFPAuthToken = (): string | undefined => {
+      if (process.env.GT_NO_AMBIENT_AUTH) {
+        return undefined;
+      }
+      if (!ambientTokenResolved) {
+        ambientTokenResolved = true;
+        ambientToken =
+          process.env.GITHUB_TOKEN ||
+          process.env.GH_TOKEN ||
+          (() => {
+            try {
+              return (
+                execSync('gh auth token', {
+                  stdio: ['ignore', 'pipe', 'ignore'],
+                  encoding: 'utf-8',
+                }).trim() || undefined
+              );
+            } catch {
+              return undefined;
+            }
+          })();
+      }
+      return ambientToken;
+    };
+
+    const getFPAuthToken = (): string | undefined => {
+      return getStoredFPAuthToken() ?? getAmbientFPAuthToken();
     };
 
     // GitHub REST/GraphQL endpoint; override for GitHub Enterprise (e.g.
@@ -161,6 +196,7 @@ export const userConfigFactory = spiffy({
       getAppServerUrl,
       getAuthToken,
       getFPAuthToken,
+      getStoredFPAuthToken,
       getGitHubApiUrl,
       getPager,
       execEditor: (editFilePath: string) => {

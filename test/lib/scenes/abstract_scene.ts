@@ -36,6 +36,9 @@ export abstract class AbstractScene {
     fs.writeFileSync(userConfigPath, cuteString({ tips: false }));
     process.env.GRAPHITE_USER_CONFIG_PATH = userConfigPath;
     process.env.GRAPHITE_PROFILE = '';
+    // Never let tests pick up the developer's real GitHub credentials via
+    // the ambient-auth fallback (GITHUB_TOKEN / gh CLI).
+    process.env.GT_NO_AMBIENT_AUTH = '1';
     this.oldDir = process.cwd();
     process.chdir(this.dir);
   }

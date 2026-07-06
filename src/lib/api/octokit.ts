@@ -10,7 +10,7 @@ export function getOctokit(userConfig: TUserConfig): Octokit {
   const auth = userConfig.getFPAuthToken();
   if (!auth) {
     throw new Error(
-      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>` then try again.'
+      'No GitHub auth token found. Run `gt auth -t <YOUR_GITHUB_TOKEN>`, set GITHUB_TOKEN, or log in with `gh auth login`, then try again.'
     );
   }
 
