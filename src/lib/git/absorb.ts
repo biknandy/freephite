@@ -30,7 +30,17 @@ export type TStagedDiffForAbsorb = {
  */
 export function getStagedDiffForAbsorb(): TStagedDiffForAbsorb {
   const diff = runGitCommand({
-    args: [`diff`, `--cached`, `--no-color`, `--no-ext-diff`, `--no-renames`],
+    args: [
+      // quotePath would mangle non-ASCII paths into quoted octal escapes,
+      // breaking the `+++ b/<path>` parsing below.
+      `-c`,
+      `core.quotePath=false`,
+      `diff`,
+      `--cached`,
+      `--no-color`,
+      `--no-ext-diff`,
+      `--no-renames`,
+    ],
     options: { noTrim: true },
     onError: 'throw',
     resource: 'getStagedDiffForAbsorb',
@@ -103,21 +113,44 @@ export function getStagedDiffForAbsorb(): TStagedDiffForAbsorb {
     }
     if (
       line.startsWith('--- /dev/null') || // new file: no history to absorb into
+      line.startsWith('+++ /dev/null') || // file deletion: keep it staged
       line.startsWith('Binary files') ||
       line.startsWith('GIT binary patch')
     ) {
       fileIsAttributable = false;
-      const nameFromDiffLine = fileHeader[0].match(
-        /^diff --git a\/.* b\/(.*)$/
-      );
-      if (nameFromDiffLine) {
-        unattributableFiles.push(nameFromDiffLine[1]);
-      }
+      filePath = undefined;
     }
   }
   flushHunk();
 
+  // Any staged file whose changes didn't parse into attributable hunks
+  // (new/deleted/binary files, quoted paths, mode-only changes, ...) must be
+  // preserved verbatim so nothing staged is ever lost.
+  const attributedFiles = new Set(hunks.map((hunk) => hunk.filePath));
+  getStagedFileNames()
+    .filter((stagedFile) => !attributedFiles.has(stagedFile))
+    .forEach((stagedFile) => unattributableFiles.push(stagedFile));
+
   return { hunks, unattributableFiles: [...new Set(unattributableFiles)] };
+}
+
+function getStagedFileNames(): string[] {
+  return runGitCommand({
+    args: [
+      `-c`,
+      `core.quotePath=false`,
+      `diff`,
+      `--cached`,
+      `--name-only`,
+      `--no-renames`,
+      `-z`,
+    ],
+    options: { noTrim: true },
+    onError: 'throw',
+    resource: 'getStagedFileNames',
+  })
+    .split('\0')
+    .filter((name) => name.length > 0);
 }
 
 // Walks a hunk body to find the range of old-side lines actually modified
@@ -189,7 +222,16 @@ export function getStagedPatchForFiles(files: string[]): string {
 
 export function getUnstagedPatch(): string {
   return runGitCommand({
-    args: [`diff`, `--binary`, `--no-color`, `--no-ext-diff`],
+    args: [
+      `diff`,
+      `--binary`,
+      `--no-color`,
+      `--no-ext-diff`,
+      // Treat intent-to-add (`git add -N`) files as untracked: they survive
+      // the reset on disk, so including them here would make the re-apply
+      // fail with "already exists in working directory".
+      `--ita-invisible-in-index`,
+    ],
     options: { noTrim: true },
     onError: 'throw',
     resource: 'getUnstagedPatch',

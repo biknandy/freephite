@@ -3,6 +3,7 @@ import { TContext } from '../lib/context';
 import {
   deleteBranch,
   forceCreateBranch,
+  getBranchWorktree,
   switchBranch,
 } from '../lib/git/branch_ops';
 import { getShaOrThrow } from '../lib/git/get_sha';
@@ -93,15 +94,47 @@ export async function undoAction(
     })),
   };
 
+  const snapshotBranchNames = new Set(snapshot.branches.map((b) => b.name));
+  const branchesToDelete = Object.keys(currentBranches).filter(
+    (branchName) => !snapshotBranchNames.has(branchName)
+  );
+  const branchesToRewrite = snapshot.branches.filter(
+    (branch) => currentBranches[branch.name] !== branch.revision
+  );
+
+  // Branches checked out in other worktrees can't be rewritten or deleted;
+  // fail before touching anything rather than restoring only part of the
+  // snapshot.
+  const blockedBranch = [
+    ...branchesToDelete,
+    ...branchesToRewrite.map((branch) => branch.name),
+  ].find((branchName) => getBranchWorktree(branchName));
+  if (blockedBranch) {
+    throw new ExitFailedError(
+      `Cannot undo: ${chalk.yellow(
+        blockedBranch
+      )} is checked out in another worktree (${getBranchWorktree(
+        blockedBranch
+      )}).`
+    );
+  }
+
   // Detach HEAD so that every branch ref (including the current one) can be
   // rewritten or deleted.
   switchBranch(getShaOrThrow('HEAD'), { detach: true });
 
-  const snapshotBranchNames = new Set(snapshot.branches.map((b) => b.name));
-  snapshot.branches.forEach((branch) => {
-    if (currentBranches[branch.name] !== branch.revision) {
-      forceCreateBranch(branch.name, branch.revision);
+  // Delete before restoring: a rename like `feat` -> `feat/sub` would
+  // otherwise hit a directory/file ref conflict when recreating `feat`.
+  branchesToDelete.forEach((branchName) => {
+    deleteBranch(branchName);
+    if (currentMetadata[branchName]) {
+      deleteMetadataRef(branchName);
     }
+  });
+  branchesToRewrite.forEach((branch) =>
+    forceCreateBranch(branch.name, branch.revision)
+  );
+  snapshot.branches.forEach((branch) => {
     if (branch.metadata) {
       if (currentMetadata[branch.name] !== branch.metadata) {
         setMetadataRefFromBlob(branch.name, branch.metadata);
@@ -110,14 +143,6 @@ export async function undoAction(
       deleteMetadataRef(branch.name);
     }
   });
-  Object.keys(currentBranches)
-    .filter((branchName) => !snapshotBranchNames.has(branchName))
-    .forEach((branchName) => {
-      deleteBranch(branchName);
-      if (currentMetadata[branchName]) {
-        deleteMetadataRef(branchName);
-      }
-    });
 
   const branchToCheckout =
     snapshot.currentBranchName &&

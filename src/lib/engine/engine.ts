@@ -658,6 +658,10 @@ export function composeEngine({
         assertBranchIsValidAndNotTrunkAndGetMeta(currentBranchName);
 
       git.moveBranch(branchName);
+      // Delete the old metadata ref before writing the new one: renaming
+      // `feat` to `feat/sub` would otherwise hit a directory/file conflict
+      // on refs/branch-metadata.
+      deleteMetadataRef(currentBranchName);
       updateMeta(branchName, { ...cachedMeta, prInfo: {} });
 
       cachedMeta.children.forEach((childBranchName) =>
@@ -666,7 +670,6 @@ export function composeEngine({
 
       removeChild(cachedMeta.parentBranchName, currentBranchName);
       delete cache.branches[currentBranchName];
-      deleteMetadataRef(currentBranchName);
       cache.currentBranch = branchName;
     },
     foldCurrentBranch: (keep: boolean) => {

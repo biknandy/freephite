@@ -82,6 +82,47 @@ for (const scene of [new BasicScene()]) {
       ).to.contain('unrelated-new-file');
     });
 
+    it('Absorb preserves staged deletions and files with non-ASCII names', () => {
+      scene.repo.createChange('a', 'a');
+      scene.repo.runCliCommand([`create`, `a`, `-m`, `a`]);
+      scene.repo.createChange('naïve-content', 'naïve');
+      scene.repo.runCliCommand([`modify`, `-a`, `-m`, `a2`]);
+
+      // Stage: an attributable fix, an edit to the unicode-named file, and
+      // a file deletion.
+      scene.repo.createChange('a-fixed', 'a');
+      scene.repo.createChange('naïve-fixed', 'naïve');
+      scene.repo.runGitCommand([`rm`, `--cached`, `1_test.txt`]);
+      scene.repo.runCliCommand([`absorb`, `--force`]);
+
+      // Attributable hunks (including the unicode path) were absorbed...
+      expect(scene.repo.getFileContents('a_test.txt')).to.equal('a-fixed');
+      expect(scene.repo.getFileContents('naïve_test.txt')).to.equal(
+        'naïve-fixed'
+      );
+      // ...and the deletion survived, still staged.
+      expect(
+        scene.repo.runGitCommandAndGetOutput([
+          `diff`,
+          `--cached`,
+          `--name-status`,
+        ])
+      ).to.contain('D\t1_test.txt');
+    });
+
+    it('Can undo a rename across a slash boundary', () => {
+      scene.repo.createChange('a');
+      scene.repo.runCliCommand([`create`, `feat`, `-m`, `a`]);
+      scene.repo.runCliCommand([`rename`, `feat/sub`]);
+      expect(scene.repo.currentBranchName()).to.equal('feat/sub');
+
+      scene.repo.runCliCommand([`undo`, `--force`]);
+      expect(scene.repo.currentBranchName()).to.equal('feat');
+      expect(scene.repo.getRef('refs/heads/feat/sub')).to.not.match(
+        /[0-9a-f]{40}/
+      );
+    });
+
     it('Absorb --dry-run reports the plan without changing anything', () => {
       scene.repo.createChange('a', 'a');
       scene.repo.runCliCommand([`create`, `a`, `-m`, `a`]);

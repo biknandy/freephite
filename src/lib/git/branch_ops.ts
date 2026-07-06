@@ -10,6 +10,34 @@ export function getCurrentBranchName(): string | undefined {
   return branchName.length > 0 ? branchName : undefined;
 }
 
+// The path of another worktree that has the branch checked out, if any.
+// Branches checked out in other worktrees cannot be rewritten or deleted.
+export function getBranchWorktree(branchName: string): string | undefined {
+  const currentWorktree = runGitCommand({
+    args: [`rev-parse`, `--show-toplevel`],
+    onError: 'ignore',
+    resource: 'getBranchWorktree',
+  });
+
+  let worktreePath: string | undefined = undefined;
+  for (const line of runGitCommand({
+    args: [`worktree`, `list`, `--porcelain`],
+    onError: 'ignore',
+    resource: 'getBranchWorktree',
+  }).split('\n')) {
+    if (line.startsWith('worktree ')) {
+      worktreePath = line.slice('worktree '.length);
+    } else if (
+      line === `branch refs/heads/${branchName}` &&
+      worktreePath &&
+      worktreePath !== currentWorktree
+    ) {
+      return worktreePath;
+    }
+  }
+  return undefined;
+}
+
 // The branch most recently checked out before the current one, i.e. `@{-1}`.
 export function getPreviousBranchName(): string | undefined {
   const branchName = runGitCommand({

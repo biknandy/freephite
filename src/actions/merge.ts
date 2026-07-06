@@ -62,6 +62,20 @@ export async function mergeAction(
     );
   }
 
+  const draftPrBranch = branchesToMerge.find(
+    (branchName) => context.engine.getPrInfo(branchName)?.isDraft
+  );
+  if (draftPrBranch) {
+    const prInfo = context.engine.getPrInfo(draftPrBranch);
+    throw new ExitFailedError(
+      `PR #${prInfo?.number} (${chalk.yellow(
+        draftPrBranch
+      )}) is a draft; mark it ready for review (e.g. ${chalk.cyan(
+        'gt submit --publish'
+      )}) before merging.`
+    );
+  }
+
   if (branchesToMerge.length === 0) {
     context.splog.info(`🆗 All PRs in this stack are already merged.`);
     context.splog.tip(
@@ -174,7 +188,16 @@ export async function mergeAction(
     const remaining = branchesToMerge.slice(index + 1);
     if (remaining.length > 0) {
       if (context.engine.pullTrunk() === 'PULL_CONFLICT') {
-        context.engine.resetTrunkToRemote();
+        throw new ExitFailedError(
+          [
+            `Local ${chalk.yellow(
+              context.engine.trunk
+            )} has diverged from remote and cannot be fast-forwarded.`,
+            `The PRs merged so far remain merged. Reconcile trunk with ${chalk.cyan(
+              'gt sync'
+            )}, then re-run ${chalk.cyan('gt merge')}.`,
+          ].join('\n')
+        );
       }
       context.engine.setParent(remaining[0], context.engine.trunk);
       restackBranches(
@@ -240,7 +263,7 @@ async function waitForMergeability(args: {
     if (['clean', 'unstable', 'has_hooks'].includes(state)) {
       return;
     }
-    if (['dirty', 'blocked'].includes(state)) {
+    if (['dirty', 'blocked', 'draft'].includes(state)) {
       break;
     }
     // 'unknown' or 'behind': GitHub is still computing mergeability.
