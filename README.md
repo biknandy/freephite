@@ -9,6 +9,14 @@ Installs three identical binaries: `gt`, `fp`, and `freephite`.
 
 ## Installation
 
+One-liner (clones to `~/.freephite/cli`, builds, and links `gt`/`fp`/`freephite`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/biknandy/freephite/main/scripts/installation/install_stable.sh | bash
+```
+
+Or manually:
+
 ```sh
 git clone https://github.com/biknandy/freephite
 cd freephite
@@ -18,6 +26,19 @@ npm link       # installs `gt`, `fp`, and `freephite` on your PATH
 ```
 
 Requires Node.js >= 18.
+
+## Updating
+
+```sh
+gt upgrade            # pull latest from GitHub, rebuild in place
+gt upgrade --check    # report current vs. latest; exits 1 if an update is available
+```
+
+The CLI also checks GitHub for a newer version at most once a day (in the
+background, never blocking a command) and prints a notice when one is
+available. Both the check and the notice can be disabled by setting
+`GRAPHITE_DISABLE_UPGRADE_PROMPT=1`. Agents and scripts can use
+`gt upgrade --check`'s exit code to decide when to self-update.
 
 ## Setup
 
@@ -119,8 +140,9 @@ npm test         # build + mocha suite
 node ./dist/src/index.js
 ```
 
-## Publish
+## Release
 
-```sh
-npm publish
-```
+Freephite is not published to npm; users install and update straight from this
+repo. To cut a release, bump `version` in `package.json` as part of the change
+landing on `main` - that version bump is what triggers the update notice and
+makes `gt upgrade --check` report an update to existing installs.

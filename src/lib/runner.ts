@@ -2,6 +2,11 @@ import yargs from 'yargs';
 import chalk from 'chalk';
 import { version } from '../../package.json';
 import { init } from '../actions/init';
+import {
+  checkForUpgradeInBackground,
+  printUpgradeMessage,
+  UPGRADE_MESSAGE_EXCLUDED_COMMANDS,
+} from '../background_tasks/check_for_upgrade';
 import { refreshPRInfoInBackground } from '../background_tasks/fetch_pr_info';
 import {
   initContext,
@@ -75,6 +80,8 @@ async function graphiteInternal(
     userEmail: git.getUserEmail(),
   });
 
+  checkForUpgradeInBackground(contextLite);
+
   try {
     await tracer.span(
       {
@@ -109,6 +116,10 @@ async function graphiteInternal(
       process.stdout.write(err.stack.toString());
     }
     process.exitCode = 1;
+  }
+
+  if (!UPGRADE_MESSAGE_EXCLUDED_COMMANDS.has(canonicalName)) {
+    printUpgradeMessage(contextLite);
   }
 }
 
