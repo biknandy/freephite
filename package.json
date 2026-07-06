@@ -38,13 +38,13 @@
     "node": ">=18"
   },
   "scripts": {
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "\"$npm_execpath\" run build",
     "postinstall": "node scripts/node_version.js || node dist/scripts/node_version.js",
     "lint": "eslint src --quiet --ext .ts --cache",
     "check": "tsc --noEmit",
-    "build": "rm -rf dist/ && npm run lint && tsc && cp scripts/node_version.js dist/scripts/node_version.js && cp src/lib/gt.fish dist/src/lib/gt.fish",
+    "build": "rm -rf dist/ && eslint src --quiet --ext .ts --cache && tsc && cp scripts/node_version.js dist/scripts/node_version.js && cp src/lib/gt.fish dist/src/lib/gt.fish",
     "build-pkg": "pkg dist/src/index.js -c package.json --public-packages \"*\"",
-    "test": "npm run build && mocha \"dist/test/**/*.test.js\" --ignore \"dist/test/large_repo.test.js\" --parallel --jobs 8",
+    "test": "\"$npm_execpath\" run build && mocha \"dist/test/**/*.test.js\" --ignore \"dist/test/large_repo.test.js\" --parallel --jobs 8",
     "cli": "node ./dist/src/index.js"
   },
   "files": [
