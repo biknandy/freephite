@@ -27,6 +27,21 @@ export function restackBranches(
     branchNames.reduce((acc, curr) => `${acc}\n${curr}`, 'RESTACKING:')
   );
   const conflictedBranches: string[] = [];
+
+  // A branch's upstack can't be restacked if the branch itself wasn't;
+  // drop those from the queue as well.
+  const skipConflictedBranch = (branchName: string) => {
+    conflictedBranches.push(branchName);
+    const upstack = new Set(
+      context.engine.getRelativeStack(branchName, SCOPE.UPSTACK)
+    );
+    for (let i = branchNames.length - 1; i >= 0; i--) {
+      if (upstack.has(branchNames[i])) {
+        branchNames.splice(i, 1);
+      }
+    }
+  };
+
   while (branchNames.length > 0) {
     const branchName = branchNames.shift() as string;
 
@@ -37,7 +52,9 @@ export function restackBranches(
       continue;
     }
 
-    const result = context.engine.restackBranch(branchName);
+    const result = context.engine.restackBranch(branchName, {
+      skipConflicts: opts?.skipConflicts,
+    });
     context.splog.debug(`${result}: ${branchName}`);
     switch (result.result) {
       case 'REBASE_DONE':
@@ -48,20 +65,16 @@ export function restackBranches(
         );
         continue;
 
+      // Replay detected the conflict without starting a real rebase, so
+      // there is nothing to abort.
+      case 'REBASE_CONFLICT_SKIPPED':
+        skipConflictedBranch(branchName);
+        continue;
+
       case 'REBASE_CONFLICT':
         if (opts?.skipConflicts) {
           context.engine.abortRebase(branchName);
-          conflictedBranches.push(branchName);
-          // A branch's upstack can't be restacked if the branch itself
-          // wasn't; drop those from the queue as well.
-          const upstack = new Set(
-            context.engine.getRelativeStack(branchName, SCOPE.UPSTACK)
-          );
-          for (let i = branchNames.length - 1; i >= 0; i--) {
-            if (upstack.has(branchNames[i])) {
-              branchNames.splice(i, 1);
-            }
-          }
+          skipConflictedBranch(branchName);
           continue;
         }
         persistContinuation(
