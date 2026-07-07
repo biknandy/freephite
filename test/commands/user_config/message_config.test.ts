@@ -27,11 +27,20 @@ for (const scene of [new BasicScene()]) {
     });
 
     it('If no message, removes message config file', () => {
-      scene.getContext().messageConfig.update((d) => (d.message = undefined));
+      // The config lives in the real user home, where the daily upgrade
+      // check may have stamped lastCheckedMs; the file is only removed
+      // when it is fully empty, so clear both fields.
+      const clear = () =>
+        scene.getContext().messageConfig.update((d) => {
+          d.message = undefined;
+          d.lastCheckedMs = undefined;
+        });
+
+      clear();
       expect(fs.existsSync(scene.getContext().messageConfig.path)).to.be.false;
 
       // can handle removing the file "twice"
-      scene.getContext().messageConfig.update((d) => (d.message = undefined));
+      clear();
       expect(fs.existsSync(scene.getContext().messageConfig.path)).to.be.false;
     });
   });

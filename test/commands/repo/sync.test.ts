@@ -181,6 +181,38 @@ for (const scene of allScenes) {
       expectCommits(scene.repo, 'b, m1, 1');
     });
 
+    it('Restacks other branches without touching HEAD or the working tree', async () => {
+      scene.repo.createChange('2', 'a');
+      scene.repo.runCliCommand([`branch`, `create`, `a`, `-m`, `a`]);
+
+      scene.repo.checkoutBranch('main');
+      scene.repo.createChange('3', 'b');
+      scene.repo.runCliCommand([`branch`, `create`, `b`, `-m`, `b`]);
+
+      // Advance trunk so b (not in the current stack) needs a restack.
+      scene.repo.checkoutBranch('main');
+      scene.repo.createChangeAndCommit('m1', 'm1');
+
+      const headReflogBefore = scene.repo.runGitCommandAndGetOutput([
+        `reflog`,
+        `HEAD`,
+      ]);
+
+      scene.repo.runCliCommand([`repo`, `sync`, `--no-pull`]);
+
+      // b was restacked in memory (git replay): HEAD never moved, so the
+      // working tree was never churned (no direnv/file-watcher triggers).
+      const headReflogAfter = scene.repo.runGitCommandAndGetOutput([
+        `reflog`,
+        `HEAD`,
+      ]);
+      expect(headReflogAfter).to.equal(headReflogBefore);
+      expect(scene.repo.currentBranchName()).to.equal('main');
+
+      scene.repo.checkoutBranch('b');
+      expectCommits(scene.repo, 'b, m1, 1');
+    });
+
     it('Restacks a branch that had trunk merged into it (merge workflow)', async () => {
       scene.repo.createChange('2', 'a');
       scene.repo.runCliCommand([`branch`, `create`, `a`, `-m`, `a`]);

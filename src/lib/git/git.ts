@@ -45,6 +45,7 @@ import {
   rebaseAbort,
   rebaseInteractive,
 } from './rebase';
+import { replayOnto } from './replay';
 import { rebaseInProgress } from './rebase_in_progress';
 import { hardReset, mixedReset, softReset, trackedReset } from './reset_branch';
 import { restoreFile } from './restore_file';
@@ -110,6 +111,7 @@ function composeGitInternal() {
     rebaseContinue,
     rebaseAbort,
     rebaseInteractive,
+    replayOnto,
     softReset,
     mixedReset,
     hardReset,

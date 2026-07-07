@@ -105,12 +105,17 @@ export type TEngine = {
   }) => void;
   forceCheckoutBranch: (branchToSplit: string) => void;
 
-  restackBranch: (branchName: string) =>
+  restackBranch: (
+    branchName: string,
+    opts?: { skipConflicts?: boolean }
+  ) =>
     | {
         result: 'REBASE_CONFLICT';
         rebasedBranchBase: string;
       }
-    | { result: 'REBASE_DONE' | 'REBASE_UNNEEDED' };
+    | {
+        result: 'REBASE_DONE' | 'REBASE_UNNEEDED' | 'REBASE_CONFLICT_SKIPPED';
+      };
 
   rebaseInteractive: (branchName: string) =>
     | {
@@ -420,7 +425,10 @@ export function composeEngine({
 
   const handleSuccessfulRebase = (
     branchName: string,
-    parentBranchRevision: string
+    parentBranchRevision: string,
+    // An in-memory replay never moves HEAD, so there is nothing to switch
+    // back to (and `git switch` would pollute the HEAD reflog).
+    opts?: { headUnmoved?: boolean }
   ) => {
     const cachedMeta = assertBranchIsValidAndNotTrunkAndGetMeta(branchName);
 
@@ -429,6 +437,10 @@ export function composeEngine({
       branchRevision: git.getShaOrThrow(branchName),
       parentBranchRevision,
     });
+
+    if (opts?.headUnmoved) {
+      return;
+    }
 
     if (cache.currentBranch && cache.currentBranch in cache.branches) {
       git.switchBranch(cache.currentBranch);
@@ -842,7 +854,7 @@ export function composeEngine({
     forceCheckoutBranch: (branchToSplit: string) => {
       git.switchBranch(branchToSplit, { force: true });
     },
-    restackBranch: (branchName: string) => {
+    restackBranch: (branchName: string, opts?: { skipConflicts?: boolean }) => {
       const cachedMeta = assertBranchIsValidOrTrunkAndGetMeta(branchName);
       if (isBranchFixed(branchName)) {
         return { result: 'REBASE_UNNEEDED' };
@@ -864,6 +876,34 @@ export function composeEngine({
         ) === cachedMeta.parentBranchRevision
           ? mergeBaseWithParent
           : cachedMeta.parentBranchRevision;
+
+      // Branches that aren't checked out restack in memory via `git replay`:
+      // no checkout, no working-tree churn (fast, and file watchers like
+      // direnv don't fire). The checked-out branch needs a real rebase so
+      // the working tree reflects the result; `--committer-date-is-author-
+      // date` is a rebase-only feature.
+      if (
+        branchName !== cache.currentBranch &&
+        !restackCommitterDateIsAuthorDate
+      ) {
+        const replayResult = git.replayOnto({
+          onto: newBase,
+          from,
+          branchName,
+        });
+        if (replayResult === 'REPLAY_DONE') {
+          handleSuccessfulRebase(branchName, newBase, { headUnmoved: true });
+          return { result: 'REBASE_DONE' };
+        }
+        if (replayResult === 'REPLAY_CONFLICT' && opts?.skipConflicts) {
+          // The caller will skip this branch; don't start a real rebase
+          // (and touch the working tree) just to abort it.
+          return { result: 'REBASE_CONFLICT_SKIPPED' };
+        }
+        // Otherwise fall through: a real rebase either handles what replay
+        // can't (merge commits, old git) or produces the conflict state
+        // for `gt continue`.
+      }
 
       if (
         git.rebase({
